@@ -1,24 +1,29 @@
 import puppeteer from "../../puppeteer.app.mjs";
 import constants from "../../common/constants.mjs";
+import common from "../common/common.mjs";
 import fs from "fs";
 
 export default {
+  ...common,
   key: "puppeteer-get-pdf",
   name: "Get PDF",
-  description: "Generate a PDF of a page using Puppeteer. [See the documentation](https://pptr.dev/api/puppeteer.page.pdf)",
-  version: "1.0.1",
+  description:
+    "Generate a PDF of a page using Puppeteer. [See the documentation](https://pptr.dev/api/puppeteer.page.pdf)",
+  version: "1.0.5",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     puppeteer,
-    url: {
-      type: "string",
-      label: "URL",
-      description: "The URL of the page to scrape.",
-    },
+    ...common.props,
     downloadPath: {
       type: "string",
       label: "Download Path",
-      description: "Download the PDF to the `/tmp` directory with the specified filename",
+      description:
+        "Download the PDF to the `/tmp` directory with the specified filename",
       optional: true,
     },
     displayHeaderFooter: {
@@ -44,13 +49,15 @@ export default {
     headerTemplate: {
       type: "string",
       label: "Header Template",
-      description: "HTML template for the print header. Should be valid HTML with the following classes used to inject values into them: `date` - formatted print date, `title` - document title, `url` - document location, `pageNumber` - current page number, `totalPages` - total pages in the document.",
+      description:
+        "HTML template for the print header. Should be valid HTML with the following classes used to inject values into them: `date` - formatted print date, `title` - document title, `url` - document location, `pageNumber` - current page number, `totalPages` - total pages in the document.",
       optional: true,
     },
     height: {
       type: "string",
       label: "Height",
-      description: "Sets the height of paper. You can pass in a number or a string with a unit.",
+      description:
+        "Sets the height of paper. You can pass in a number or a string with a unit.",
       optional: true,
     },
     landscape: {
@@ -87,7 +94,8 @@ export default {
     omitBackground: {
       type: "boolean",
       label: "Omit Background",
-      description: "Hides default white background and allows generating pdfs with transparency.",
+      description:
+        "Hides default white background and allows generating pdfs with transparency.",
       optional: true,
       default: false,
     },
@@ -100,7 +108,8 @@ export default {
     preferCSSPageSize: {
       type: "boolean",
       label: "Prefer CSS Page Size",
-      description: "Give any CSS @page size declared in the page priority over what is declared in the width or height or format option.",
+      description:
+        "Give any CSS @page size declared in the page priority over what is declared in the width or height or format option.",
       optional: true,
       default: false,
     },
@@ -114,7 +123,8 @@ export default {
     scale: {
       type: "string",
       label: "Scale",
-      description: "Scales the rendering of the web page. Amount must be between 0.1 and 2.",
+      description:
+        "Scales the rendering of the web page. Amount must be between 0.1 and 2.",
       optional: true,
     },
     timeout: {
@@ -127,11 +137,18 @@ export default {
     width: {
       type: "string",
       label: "Width",
-      description: "Sets the width of paper. You can pass in a number or a string with a unit.",
+      description:
+        "Sets the width of paper. You can pass in a number or a string with a unit.",
       optional: true,
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   methods: {
+    ...common.methods,
     async downloadToTMP(pdf) {
       const path = this.downloadPath.includes("/tmp")
         ? this.downloadPath
@@ -165,25 +182,24 @@ export default {
       width: this.width,
     };
 
+    const url = this.normalizeUrl();
     const browser = await this.puppeteer.launch();
     const page = await browser.newPage();
-    await page.goto(this.url);
+    await page.goto(url);
     const pdf = await page.pdf(options);
     await browser.close();
 
-    const filePath = pdf && this.downloadPath
-      ? await this.downloadToTMP(pdf)
-      : undefined;
+    const filePath =
+      pdf && this.downloadPath
+        ? await this.downloadToTMP(pdf)
+        : undefined;
 
     if (pdf) {
-      $.export("$summary", "Successfully generated PDF from page.");
+      $.export("$summary", `Successfully generated PDF from ${url}`);
     }
 
     return filePath
-      ? {
-        pdf,
-        filePath,
-      }
+      ? filePath
       : pdf;
   },
 };

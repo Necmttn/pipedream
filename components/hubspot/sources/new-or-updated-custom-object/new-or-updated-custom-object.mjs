@@ -1,11 +1,13 @@
+import { DEFAULT_LIMIT } from "../../common/constants.mjs";
 import common from "../common/common.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "hubspot-new-or-updated-custom-object",
   name: "New or Updated Custom Object",
   description: "Emit new event each time a Custom Object of the specified schema is updated.",
-  version: "0.0.1",
+  version: "0.0.37",
   dedupe: "unique",
   type: "source",
   props: {
@@ -17,7 +19,6 @@ export default {
       ],
     },
   },
-  hooks: {},
   methods: {
     ...common.methods,
     getTs(object) {
@@ -38,21 +39,24 @@ export default {
     getParams() {
       return null;
     },
-    getObjectParams(object) {
-      return {
-        limit: 100,
-        sorts: [
-          {
-            propertyName: "hs_lastmodifieddate",
-            direction: "DESCENDING",
-          },
-        ],
+    getObjectParams(object, after) {
+      return this.addDateFilter({
+        data: {
+          limit: DEFAULT_LIMIT,
+          sorts: [
+            {
+              propertyName: "hs_lastmodifieddate",
+              direction: "DESCENDING",
+            },
+          ],
+        },
         object,
-      };
+      }, "hs_lastmodifieddate", after);
     },
     async processResults(after) {
-      const params = this.getObjectParams(this.objectSchema);
+      const params = this.getObjectParams(this.objectSchema, after);
       await this.searchCRM(params, after);
     },
   },
+  sampleEmit,
 };

@@ -1,6 +1,6 @@
 # Overview
 
-The Pipedream Discord app enables you to build event-driven workflows that interact with the Discord API. When you authorize the Pipedream app's access to your guilds, you can use [Pipedream workflows](/workflows/) to perform common Discord [actions](#workflow-actions), or [write your own code](/code/) against the Discord API.
+The Discord Bot API unlocks the power to interact with Discord users and channels programmatically, making it possible to automate messages, manage servers, and integrate with other services. With Pipedream's serverless platform, you can create complex workflows that respond to events in Discord, process data, and trigger actions in other apps. This opens up opportunities for community engagement, content moderation, analytics, and more, without the overhead of managing infrastructure.
 
 # Getting Started
 
@@ -29,7 +29,7 @@ Discord and Discord Bot actions and triggers _can_ both:
 
 However the Discord integration will perform actions with the official Pipedream Discord bot.
 
-Using the Discord Bot integration will use a custom bot instead, with it's own name and photo.
+Using the Discord Bot integration will use a custom bot instead, with its own name and photo.
 
 ## New Messages in Channel
 
@@ -45,7 +45,7 @@ The first time this source runs, it fetches up to the last 100 messages sent to 
 
 By default, this event source is configured to emit an event for every new message in the channel. For example, if 5 messages are sent to the channel in one minute, the source will emit 5 events, one for each message. You can set the source to batch the events the source collects and emit them as a single event by setting the **Emit messages as a single event** parameter to `true`.
 
-<img alt="Emit messages as a single event" src="https://res.cloudinary.com/pipedreamin/image/upload/v1663079842/docs/components/CleanShot_2022-09-13_at_10.36.58_airn9p.gif" />
+<img alt="Emit messages as a single event" src="https://assets.pipedream.net/s.v0/static/legacy/pipedreamin/docs/components/CleanShot_2022-09-13_at_10.36.58_airn9p.gif" />
 
 In this example, the source would emit a single event: an array of 5 messages.
 
@@ -57,11 +57,19 @@ At the time of writing, Discord only requires bots in 100 or more servers to app
 
 You can request for this approval in the **Discord Developer Portal**.
 
+# Example Use Cases
+
+- **Automated Moderation Workflow**: Trigger a Pipedream workflow whenever a message is posted in a Discord channel. Use sentiment analysis to detect negative content and automatically remove messages or alert moderators. Integrate with Slack to send real-time notifications to a moderation team.
+
+- **Streamlined Community Engagement**: Send automated welcome messages to new Discord server members using Pipedream. Sync these new member details to a CRM like Salesforce or Airtable to maintain an organized community member database, and trigger an email sequence with SendGrid to onboard them.
+
+- **Event-Driven Notifications**: Configure a workflow that listens for specific keywords or commands in a Discord channel. When detected, use Pipedream to fetch data from an external API, such as Jira or GitHub, and post updates back to the channel to keep your community informed on project statuses or issue resolutions.
+
 # Troubleshooting
 
 Make sure your bot has the required privileges:
 
-![Example of bot priviledges](https://res.cloudinary.com/pipedreamin/image/upload/v1671660179/au5lekhader3nzaljmao.png)
+![Example of bot privileges](bot_priviledges.png)
 
 If you have issues with this integration, please join our public Slack and ask for help.
 

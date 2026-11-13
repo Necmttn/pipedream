@@ -1,12 +1,17 @@
-import zoomAdmin from "../../zoom_admin.app.mjs";
-import consts from "../../consts.mjs";
 import { paginate } from "../../common/pagination.mjs";
+import consts from "../../consts.mjs";
+import zoomAdmin from "../../zoom_admin.app.mjs";
 
 export default {
   name: "List Cloud Recordings",
-  description: "Search cloud recordings from a meeting or webinar. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/cloud-recording/recordingslist)",
+  description: "Search cloud recordings from a meeting or webinar. [See the documentation](https://marketplace.zoom.us/docs/api-reference/zoom-api/cloud-recording/recordingslist)",
   key: "zoom_admin-list-cloud-recordings",
-  version: "0.2.0",
+  version: "0.2.5",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     zoomAdmin,

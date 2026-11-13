@@ -1,4 +1,4 @@
-import component from "../../../slack/actions/list-members-in-channel/list-members-in-channel.mjs";
+import component from "@pipedream/slack/actions/list-members-in-channel/list-members-in-channel.mjs";
 import constants from "../../common/constants.mjs";
 import utils from "../../common/utils.mjs";
 
@@ -16,7 +16,7 @@ export default {
       conversation: {
         propDefinition: [
           undefined,
-          "channelId",
+          "conversation",
           () => ({
             types: [
               constants.CHANNEL_TYPE.PUBLIC,
@@ -29,6 +29,6 @@ export default {
     },
   }),
   key: "slack_bot-list-members-in-channel",
-  description: "Retrieve members of a channel (Bot). [See docs here](https://api.slack.com/methods/conversations.members)",
-  version: "0.0.2",
+  description: "Retrieve members of a channel (Bot). [See the documentation](https://api.slack.com/methods/conversations.members)",
+  version: "0.0.5",
 };

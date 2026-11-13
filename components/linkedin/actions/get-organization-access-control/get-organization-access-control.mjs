@@ -3,15 +3,22 @@ import linkedin from "../../linkedin.app.mjs";
 export default {
   key: "linkedin-get-organization-access-control",
   name: "Gets Organization Access Control",
-  description: "Gets an organization's access control information, given the organization urn. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/organizations/organization-access-control?context=linkedin/compliance/context#find-access-control-information)",
-  version: "0.1.4",
+  description: "Gets a selected organization's access control information. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-organization-access-control)",
+  version: "0.2.8",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     linkedin,
-    organizationUrn: {
-      type: "string",
-      label: "Organization Urn",
-      description: "The organizational entity for which the access control information is being retrieved. Must be in URN format urn:li:organization:{id}.",
+    organizationId: {
+      propDefinition: [
+        linkedin,
+        "organizationId",
+      ],
+      description: "The ID of the organization for which the access control information is being retrieved",
     },
     max: {
       propDefinition: [
@@ -21,24 +28,22 @@ export default {
     },
   },
   async run({ $ }) {
+    let start = 0;
     const count = 50;
     const results = [];
 
-    const params = {
-      q: "organization",
-      organization: encodeURI(this.organizationUrn),
-      start: 0,
-      count,
-    };
+    const organizationUrn = `urn:li:organization:${this.organizationId}`;
+
+    const params = `q=organization&organization=${organizationUrn.replace(/:/g, "%3A")}&count=${count}`;
 
     let done = false;
     do {
-      const { elements } = await this.linkedin.getAccessControl({
-        $,
-        params,
+      const { data: { elements } } = await this.linkedin.getAccessControl({
+        strParams: params + `&start=${start}`,
       });
+
       results.push(...elements);
-      params.start += count;
+      start += count;
       if (elements?.length < count) {
         done = true;
       }

@@ -5,8 +5,13 @@ export default {
   ...common,
   key: "youtube_data_api-update-video-details",
   name: "Update Video Details",
-  description: "Updates a video's metadata. [See the docs](https://developers.google.com/youtube/v3/docs/videos/update) for more information",
-  version: "0.0.1",
+  description: "Updates a video's metadata. [See the documentation](https://developers.google.com/youtube/v3/docs/videos/update) for more information",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     youtubeDataApi,
@@ -21,6 +26,7 @@ export default {
         youtubeDataApi,
         "title",
       ],
+      optional: true,
     },
     description: {
       propDefinition: [
@@ -40,7 +46,6 @@ export default {
         youtubeDataApi,
         "regionCode",
       ],
-      default: "US",
     },
     categoryId: {
       propDefinition: [
@@ -50,6 +55,7 @@ export default {
           regionCode: c.regionCode,
         }),
       ],
+      optional: true,
     },
     onBehalfOfContentOwner: {
       propDefinition: [

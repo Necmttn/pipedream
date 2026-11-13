@@ -1,10 +1,16 @@
-import common from "../common/checklist-props.mjs";
+import common from "../common/task-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-create-checklist-item",
   name: "Create Checklist Item",
-  description: "Creates a new item in a checklist. See the docs [here](https://clickup.com/api) in **Checklists / Create Checklist Item** section.",
-  version: "0.0.7",
+  description: "Creates a new item in a checklist. [See the documentation](https://clickup.com/api) in **Checklists / Create Checklist Item** section.",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,
@@ -24,6 +30,48 @@ export default {
         }),
       ],
       optional: true,
+    },
+    folderId: {
+      propDefinition: [
+        common.props.clickup,
+        "folderId",
+        (c) => ({
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    listId: {
+      propDefinition: [
+        common.props.clickup,
+        "listId",
+        (c) => ({
+          folderId: c.folderId,
+          spaceId: c.spaceId,
+        }),
+      ],
+    },
+    taskId: {
+      propDefinition: [
+        common.props.clickup,
+        "taskId",
+        (c) => ({
+          listId: c.listId,
+          useCustomTaskIds: c.useCustomTaskIds,
+          authorizedTeamId: c.authorizedTeamId,
+        }),
+      ],
+    },
+    checklistId: {
+      propDefinition: [
+        common.props.clickup,
+        "checklistId",
+        (c) => ({
+          taskId: c.taskId,
+          useCustomTaskIds: c.useCustomTaskIds,
+          authorizedTeamId: c.authorizedTeamId,
+        }),
+      ],
     },
   },
   async run({ $ }) {

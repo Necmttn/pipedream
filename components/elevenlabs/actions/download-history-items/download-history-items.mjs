@@ -6,9 +6,15 @@ import elevenlabs from "../../elevenlabs.app.mjs";
 export default {
   key: "elevenlabs-download-history-items",
   name: "Download History Items",
-  version: "0.0.2",
+  version: "0.0.7",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   description: "Download one or more history items to your workflow's `tmp` directory. If one history item ID is provided, we will return a single audio file. If more than one history item IDs are provided, we will provide the history items packed into a .zip file. [See the documentation](https://docs.elevenlabs.io/api-reference/history-download)",
   type: "action",
+  ai: "optimized",
   props: {
     elevenlabs,
     historyItemIds: {
@@ -17,6 +23,11 @@ export default {
         "historyItemId",
       ],
       type: "string[]",
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   async run({ $ }) {

@@ -2,7 +2,12 @@ import bybit from "../../bybit.app.mjs";
 
 export default {
   name: "ByBit Linear Position TP/SL Switch Mode",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "bybit-linear-position-tpsl-switch",
   description: "Switch mode between Full or Partial. " +
       "When set to Partial, TP/SL orders may have a quantity less than the position size. " +
@@ -25,6 +30,7 @@ export default {
     },
   },
   type: "action",
+  ai: "optimized",
   async run({ $ }) {
     const API_METHOD = "POST";
     const API_PATH = "/private/linear/tpsl/switch-mode";

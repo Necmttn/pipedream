@@ -1,12 +1,13 @@
+// x-pd-ai: optimized
+import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
 import app from "../../calendly_v2.app.mjs";
 import sampleEmit from "./test-event.mjs";
-import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
 
 export default {
   key: "calendly_v2-new-event-scheduled",
   name: "New Event Scheduled",
   description: "Emit new event when a event is scheduled.",
-  version: "0.0.5",
+  version: "0.0.9",
   type: "source",
   dedupe: "unique",
   props: {
@@ -18,6 +19,54 @@ export default {
         intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
       },
     },
+    alert: {
+      propDefinition: [
+        app,
+        "listEventsAlert",
+      ],
+    },
+    scope: {
+      propDefinition: [
+        app,
+        "listEventsScope",
+      ],
+      reloadProps: true,
+    },
+    organization: {
+      propDefinition: [
+        app,
+        "organization",
+      ],
+      optional: true,
+      hidden: true,
+    },
+    user: {
+      propDefinition: [
+        app,
+        "user",
+        (c) => ({
+          organization: c.organization,
+        }),
+      ],
+      description: "Returns events for a specified user",
+      optional: true,
+      hidden: true,
+    },
+    group: {
+      propDefinition: [
+        app,
+        "groupId",
+        (c) => ({
+          organization: c.organization,
+        }),
+      ],
+      description: "Returns events for a specified group",
+      optional: true,
+      hidden: true,
+    },
+  },
+  async additionalProps(props) {
+    return this.app.listEventsAdditionalProps(props, this.scope);
   },
   methods: {
     emitEvent(data) {
@@ -41,14 +90,27 @@ export default {
 
     let nextPage;
 
+    const params = {
+      count: 100,
+      sort: "created_at:desc",
+    };
+    if (this.scope !== "authenticatedUser") {
+      params.organization = this.organization;
+    }
+    if (this.scope === "user") {
+      params.user = this.user;
+    }
+    if (this.scope === "group") {
+      params.group = this.group;
+    }
+
     do {
       const {
         pagination, collection: events,
       } = await this.app.listEvents({
         params: {
+          ...params,
           page_token: nextPage,
-          count: 100,
-          sort: "created_at:desc",
         },
       });
 

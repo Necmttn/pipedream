@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/wufoo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pipedream Wufoo Components",
   "main": "wufoo.app.mjs",
   "keywords": [
@@ -13,7 +13,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.5.1",
-    "qs": "^6.11.2"
+    "@pipedream/platform": "^1.6.8",
+    "qs": "^6.16.0"
   }
 }

@@ -1,11 +1,12 @@
 import common from "../common/common.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "clickup-new-task-advanced",
   name: "New Task Advanced (Instant)",
   description: "Emit new event when a new task is created matching the filter",
-  version: "0.0.3",
+  version: "0.0.8",
   dedupe: "unique",
   type: "source",
   props: {
@@ -18,28 +19,24 @@ export default {
           workspaceId: c.workspaceId,
         }),
       ],
-      description: "If selected, the **Lists** will be filtered by this Space ID",
-      optional: true,
     },
     folderId: {
       propDefinition: [
         common.props.app,
-        "folders",
+        "folderId",
         (c) => ({
           spaceId: c.spaceId,
         }),
       ],
-      description: "If selected, the **Lists** will be filtered by this Folder ID",
       optional: true,
     },
     listId: {
       propDefinition: [
         common.props.app,
-        "lists",
+        "listId",
         (c) => ({
-          workspaceId: c.workspaceId,
-          spaceId: c.spaceId,
           folderId: c.folderId,
+          spaceId: c.spaceId,
         }),
       ],
       optional: true,
@@ -89,4 +86,5 @@ export default {
       }, this._getMeta(httpRequest.body));
     }
   },
+  sampleEmit,
 };

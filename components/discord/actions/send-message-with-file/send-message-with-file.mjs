@@ -1,14 +1,17 @@
 import common from "../common/common.mjs";
-import { axios } from "@pipedream/platform";
-import fs from "fs";
-import { ConfigurationError } from "@pipedream/platform";
+import { getFileStreamAndMetadata } from "@pipedream/platform";
 
 export default {
   ...common,
   key: "discord-send-message-with-file",
   name: "Send Message With File",
   description: "Post a message with an attached file",
-  version: "1.1.0",
+  version: "2.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,
@@ -19,17 +22,17 @@ export default {
       ],
       optional: true,
     },
-    fileUrl: {
-      propDefinition: [
-        common.props.discord,
-        "fileUrl",
-      ],
+    file: {
+      type: "string",
+      label: "File Path Or Url",
+      description: "Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/example.pdf`)",
+      format: "file-ref",
     },
-    filePath: {
-      propDefinition: [
-        common.props.discord,
-        "filePath",
-      ],
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
     },
   },
   async run({ $ }) {
@@ -38,28 +41,24 @@ export default {
       avatarURL,
       threadID,
       username,
-      fileUrl,
-      filePath,
+      file,
       includeSentViaPipedream,
+      suppressNotifications,
     } = this;
 
-    if (!fileUrl && !filePath) {
-      throw new ConfigurationError("This action requires either File URL or File Path. Please enter one or the other above.");
-    }
+    const {
+      stream,
+      metadata,
+    } = await getFileStreamAndMetadata(file);
 
-    const file = fileUrl
-      ? await axios($, {
-        method: "get",
-        url: fileUrl,
-        responseType: "stream",
-      })
-      : fs.createReadStream(filePath);
+    stream.name = metadata.name;
 
     try {
       const resp = await this.discord.sendMessage(this.channel, {
         avatar_url: avatarURL,
         username,
-        file,
+        file: stream,
+        flags: this.getMessageFlags(suppressNotifications),
         content: includeSentViaPipedream
           ? this.appendPipedreamText(message ?? "")
           : message,

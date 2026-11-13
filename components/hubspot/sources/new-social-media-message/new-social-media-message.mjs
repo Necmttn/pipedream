@@ -1,11 +1,13 @@
 import common from "../common/common.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "hubspot-new-social-media-message",
   name: "New Social Media Message",
-  description: "Emit new event when a message is posted from HubSpot to the specified social media channel",
-  version: "0.0.12",
+  description:
+    "Emit new event when a message is posted from HubSpot to the specified social media channel. Note: Only available for Marketing Hub Enterprise accounts",
+  version: "0.0.48",
   type: "source",
   dedupe: "unique",
   props: {
@@ -17,7 +19,6 @@ export default {
       ],
     },
   },
-  hooks: {},
   methods: {
     ...common.methods,
     getTs(message) {
@@ -25,8 +26,7 @@ export default {
     },
     generateMeta(message) {
       const {
-        broadcastGuid: id,
-        messageText: summary,
+        broadcastGuid: id, messageText: summary,
       } = message;
       const ts = this.getTs(message);
       return {
@@ -40,8 +40,10 @@ export default {
     },
     getParams(after) {
       return {
-        withChannelKeys: this.channel,
-        since: after,
+        params: {
+          withChannelKeys: this.channel,
+          since: after,
+        },
       };
     },
     async processResults(after, params) {
@@ -53,4 +55,5 @@ export default {
       );
     },
   },
+  sampleEmit,
 };

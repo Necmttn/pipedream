@@ -5,7 +5,12 @@ export default {
   name: "Add Contacts to Sequence",
   description: "Adds one or more contacts to a sequence in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#add-contacts-to-sequence)",
   type: "action",
-  version: "0.0.1",
+  version: "0.0.8",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     app,
     sequenceId: {

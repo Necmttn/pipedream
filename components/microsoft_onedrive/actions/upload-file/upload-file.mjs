@@ -1,14 +1,19 @@
 import onedrive from "../../microsoft_onedrive.app.mjs";
-import httpRequest from "../../common/httpRequest.mjs";
-import { ConfigurationError } from "@pipedream/platform";
-import fs from "fs";
-import { fileTypeFromBuffer } from "file-type";
+import {
+  ConfigurationError,
+  getFileStreamAndMetadata,
+} from "@pipedream/platform";
 
 export default {
   name: "Upload File",
   description: "Upload a file to OneDrive. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online)",
   key: "microsoft_onedrive-upload-file",
-  version: "0.1.0",
+  version: "0.2.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     onedrive,
@@ -22,29 +27,20 @@ export default {
     },
     filePath: {
       type: "string",
-      label: "File Path",
-      description: "The path to the image file saved to the `/tmp` directory (e.g. `/tmp/image.png`). [See the documentation](https://pipedream.com/docs/workflows/steps/code/nodejs/working-with-files/#the-tmp-directory).",
+      label: "File Path or URL",
+      description: "The file to upload. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`)",
+      format: "file-ref",
     },
     filename: {
       type: "string",
       label: "Name",
       description: "Name of the new uploaded file",
     },
-  },
-  methods: {
-    httpRequest,
-    uploadFile({
-      uploadFolderId, name, data, ...args
-    }) {
-      return this.httpRequest({
-        url: `/items/${uploadFolderId}:/${encodeURI(name)}:/content`,
-        headers: {
-          "Content-Type": "application/octet-stream",
-        },
-        data,
-        method: "PUT",
-        ...args,
-      });
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
     },
   },
   async run({ $ }) {
@@ -56,18 +52,15 @@ export default {
       throw new ConfigurationError("You must specify the **Upload Folder ID**.");
     }
 
-    const data = fs.readFileSync(filePath);
-    let name = filename;
-    if (!filename.includes(".")) {
-      const fileType = await fileTypeFromBuffer(data);
-      const extension = fileType?.ext || "";
-      name = `${filename}.${extension}`;
-    }
+    const {
+      stream, metadata,
+    } = await getFileStreamAndMetadata(filePath);
+    const name = filename || metadata.name;
 
-    const response = await this.uploadFile({
+    const response = await this.onedrive.uploadFile({
       uploadFolderId,
       name,
-      data,
+      data: stream,
       $,
     });
 

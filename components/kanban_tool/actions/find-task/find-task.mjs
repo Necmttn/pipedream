@@ -3,7 +3,12 @@ import utils from "../../common/utils.mjs";
 
 export default {
   key: "kanban_tool-find-task",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   name: "Find Task",
   description: "Finds task with given parameters [See the docs here](https://kanbantool.com/developer/api-v3#searching-tasks)",
@@ -48,7 +53,7 @@ export default {
     for await (const item of resourcesStream)
       items.push(item);
     // eslint-disable-next-line multiline-ternary
-    $.export("$summary", `${items.length} task${items.length != 1 ? "s" : ""} has been found.`);
+    $.export("$summary", `${items.length} task${items.length != 1 ? "s" : ""} found`);
     return items;
   },
 };

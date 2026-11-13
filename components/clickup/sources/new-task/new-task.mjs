@@ -1,25 +1,44 @@
 import common from "../common/common.mjs";
-import app from "../../clickup.app.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "clickup-new-task",
   name: "New Task (Instant)",
   description: "Emit new event when a new task is created",
-  version: "0.1.2",
+  version: "0.1.7",
   dedupe: "unique",
   type: "source",
   props: {
     ...common.props,
-    listId: {
+    spaceId: {
       propDefinition: [
-        app,
-        "lists",
-        ({ workspaceId }) => ({
-          workspaceId,
+        common.props.app,
+        "spaces",
+        (c) => ({
+          workspaceId: c.workspaceId,
         }),
       ],
-      description: "If a list is selected, only tasks created in this list will emit an event",
+    },
+    folderId: {
+      propDefinition: [
+        common.props.app,
+        "folderId",
+        (c) => ({
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    listId: {
+      propDefinition: [
+        common.props.app,
+        "listId",
+        (c) => ({
+          folderId: c.folderId,
+          spaceId: c.spaceId,
+        }),
+      ],
       optional: true,
     },
   },
@@ -55,4 +74,5 @@ export default {
 
     this.$emit(body, this._getMeta(body));
   },
+  sampleEmit,
 };

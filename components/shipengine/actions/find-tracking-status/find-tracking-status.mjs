@@ -5,7 +5,13 @@ export default {
   name: "Find Tracking Status",
   description: "Retrieves package tracking information. [See the docs](https://shipengine.github.io/shipengine-openapi/#operation/get_tracking_log).",
   type: "action",
-  version: "0.0.2",
+  ai: "optimized",
+  version: "0.0.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   props: {
     app,
     carrierCode: {

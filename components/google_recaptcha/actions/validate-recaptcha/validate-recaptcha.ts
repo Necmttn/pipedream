@@ -3,7 +3,12 @@ import { defineAction } from "@pipedream/types";
 
 export default defineAction({
   name: "Validate reCAPTCHA Response",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   key: "google_recaptcha-validate-recaptcha",
   description: "Validate a Google reCAPTCHA request (v2 or v3). [See docs here](https://developers.google.com/recaptcha/docs/verify)",
   props: {
@@ -11,7 +16,7 @@ export default defineAction({
     remote_ip: {
       type: "string",
       label: "Remote IP Address",
-      description: "The IP Address originating the request. This whould be the user IP where the challenge was executed on the frontend.",
+      description: "The IP Address originating the request. This would be the user IP where the challenge was executed on the frontend.",
       default: "{{steps.trigger.event.client_ip}}",
       optional: true,
     },

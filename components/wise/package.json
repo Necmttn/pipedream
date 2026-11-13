@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/wise",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Pipedream Wise Components",
   "main": "wise.app.mjs",
   "keywords": [
@@ -14,6 +14,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.2.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

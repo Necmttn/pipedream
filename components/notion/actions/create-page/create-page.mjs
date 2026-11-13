@@ -1,24 +1,33 @@
-import utils from "../../common/utils.mjs";
 import notion from "../../notion.app.mjs";
+import utils from "../../common/utils.mjs";
 import base from "../common/base-page-builder.mjs";
+
+const MAX_BLOCKS = 100;
 
 export default {
   ...base,
   key: "notion-create-page",
   name: "Create Page",
-  description: "Creates a page from a parent page. The only valid property is *title*. [See the documentation](https://developers.notion.com/reference/post-page)",
-  version: "0.2.10",
+  description:
+    "Create a new Notion page. The `parent` can be **either** another page (creates a subpage) **or** a database/data source (creates a row in that database)."
+    + " Provide the parent's ID or URL — use **Search** to resolve a name into an ID."
+    + " When the parent is a database, set `properties` to a flat JSON object of column-name → value (e.g. `{ \"Status\": \"Active\", \"ThreatLevel\": 9 }`); call **Retrieve Database Schema** first to learn the exact column names and valid select options."
+    + " `content` is the page body as Markdown (headings, bullet lists, paragraphs, etc.)."
+    + " [See the documentation](https://developers.notion.com/reference/post-page)",
+  version: "1.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     notion,
     parent: {
-      propDefinition: [
-        notion,
-        "pageId",
-      ],
-      label: "Parent Page ID",
-      description: "The identifier for a Notion parent page",
-      reloadProps: true,
+      type: "string",
+      label: "Parent (Page or Data Source ID)",
+      description: "**REQUIRED — must be a real UUID.** Notion has no \"workspace root\", so every new page must have a parent page or data source. The value must be either (a) the UUID of an existing page (creates a subpage), (b) the UUID of an existing data source (creates a database row), or (c) a Notion URL containing such a UUID. If the user gave a parent name instead of an ID, call **Search** first to resolve the name into an ID, then pass the ID here. Do NOT pass empty, `\"root\"`, `\"workspace\"`, or any non-UUID placeholder — the API will reject it.",
     },
     title: {
       propDefinition: [
@@ -26,82 +35,104 @@ export default {
         "title",
       ],
     },
-    metaTypes: {
-      propDefinition: [
-        notion,
-        "metaTypes",
-      ],
-    },
-    pageContent: {
+    properties: {
       type: "string",
-      label: "Page Content",
-      description: "Content of the page. You can use Markdown syntax [See docs](https://www.notion.so/help/writing-and-editing-basics#markdown-&-shortcuts)",
+      label: "Properties",
+      description: "Only for pages created in a database. A flat JSON object of column-name → value, e.g. `{ \"Status\": \"Active\", \"ThreatLevel\": 9 }`. Use **Retrieve Database Schema** to discover valid names and select options.",
+      optional: true,
     },
-  },
-  async additionalProps() {
-    return this.buildAdditionalProps({
-      meta: this.metaTypes,
-    });
-  },
-  methods: {
-    ...base.methods,
-    /**
-     * Builds a page from a parent page
-     * @param parentPage - the parent page
-     * @returns the constructed page in Notion format
-     */
-    buildPage(parentPage) {
-      const meta = this.buildPageMeta(parentPage);
-      const children = this.createBlocks(this.pageContent);
-
-      const properties = {};
-      if (this.title) {
-        properties.title = {
-          title: utils.buildTextProperty(this.title),
-        };
-      }
-
-      return {
-        ...meta,
-        properties,
-        children,
-      };
-    },
-    splitChildrenArray(children) {
-      const first100Children = children.slice(0, 100);
-      const restOfChildren = children.slice(100);
-      return {
-        first100Children,
-        restOfChildren,
-      };
-    },
-    async appendChildren(pageId, children) {
-      while (children.length) {
-        const {
-          first100Children, restOfChildren,
-        } = this.splitChildrenArray(children);
-        await this.notion.appendBlock(pageId, first100Children);
-        children = restOfChildren;
-      }
+    content: {
+      type: "string",
+      label: "Content",
+      description: "The page body as Markdown. [Markdown reference](https://www.notion.com/help/writing-and-editing-basics#markdown-and-shortcuts).",
+      optional: true,
     },
   },
   async run({ $ }) {
-    const parentPage = await this.notion.retrievePage(this.parent);
-    const page = this.buildPage(parentPage);
+    const parentId = utils.extractNotionId(this.parent);
+    const { content } = this;
 
-    // Notion restricts children array length to <= 100
-    const {
-      first100Children, restOfChildren,
-    } = this.splitChildrenArray(page.children);
-    page.children = first100Children;
-
-    const response = await this.notion.createPage(page);
-
-    if (restOfChildren.length) {
-      await this.appendChildren(response.id, restOfChildren);
+    // Determine whether the parent is a data source (database) or a page.
+    // Only the "not a data source" lookup failure (404 / object_not_found)
+    // means "treat the parent as a page" — re-throw auth, permission,
+    // rate-limit, and network errors instead of silently falling back.
+    let dataSource = null;
+    try {
+      dataSource = await this.notion.retrieveDataSource(parentId);
+    } catch (error) {
+      if (error?.status !== 404 && error?.code !== "object_not_found") {
+        throw error;
+      }
+      dataSource = null;
     }
 
-    $.export("$summary", "Created page successfully");
+    let response;
+
+    if (dataSource) {
+      // Create a row (page) inside the data source.
+      const parsed = utils.parsePropertiesObject(this.properties) || {};
+      if (this.title) {
+        const titleProp = Object.entries(dataSource.properties)
+          .find(([
+            ,
+            value,
+          ]) => value.type === "title")?.[0];
+        if (titleProp) {
+          parsed[titleProp] = this.title;
+        }
+      }
+      this.properties = parsed;
+
+      const properties = this.buildPageProperties(dataSource.properties);
+      const children = content?.trim()
+        ? this.createBlocks(content)
+        : [];
+
+      response = await this.notion.createPage({
+        parent: {
+          type: "data_source_id",
+          data_source_id: parentId,
+        },
+        properties,
+        children: children.slice(0, MAX_BLOCKS),
+      });
+
+      let remaining = children.slice(MAX_BLOCKS);
+      while (remaining.length > 0) {
+        await this.notion.appendBlock(response.id, remaining.slice(0, MAX_BLOCKS));
+        remaining = remaining.slice(MAX_BLOCKS);
+      }
+    } else {
+      // Create a subpage under a parent page. Create with the title first,
+      // then append content in MAX_BLOCKS chunks so large Markdown bodies
+      // don't exceed Notion's per-request block limit.
+      const children = content?.trim()
+        ? this.createBlocks(content)
+        : [];
+
+      response = await this.buildPageFromDataSource({
+        parentPageId: parentId,
+        properties: [
+          {
+            label: "title",
+            type: "title",
+            value: this.title || "Untitled",
+          },
+        ],
+      });
+
+      let remaining = children;
+      while (remaining.length > 0) {
+        await this.notion.appendBlock(response.id, remaining.slice(0, MAX_BLOCKS));
+        remaining = remaining.slice(MAX_BLOCKS);
+      }
+    }
+
+    $.export("$summary", `Created page${this.title
+      ? ` "${this.title}"`
+      : ""}${response?.url
+      ? ` (${response.url})`
+      : ""}`);
     return response;
   },
 };

@@ -4,8 +4,13 @@ import app from "../../google_sheets.app.mjs";
 export default {
   key: "google_sheets-insert-anchored-note",
   name: "Insert an Anchored Note",
-  description: "Insert a note on a spreadsheet cell. [See the docs here](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)",
-  version: "0.1.2",
+  description: "Insert a note on a spreadsheet cell. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)",
+  version: "0.1.18",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     app,
@@ -18,12 +23,9 @@ export default {
     sheetId: {
       propDefinition: [
         app,
-        "fileId",
-        ({ drive }) => ({
-          drive,
-          baseOpts: {
-            q: "mimeType = 'application/vnd.google-apps.spreadsheet'",
-          },
+        "sheetID",
+        (c) => ({
+          driveId: app.methods.getDriveId(c.drive),
         }),
       ],
     },
@@ -46,7 +48,6 @@ export default {
           sheetId: c.sheetId,
         }),
       ],
-      type: "string",
       optional: true,
     },
   },

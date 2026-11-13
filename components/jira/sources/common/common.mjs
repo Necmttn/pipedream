@@ -1,11 +1,26 @@
 import jira from "../../jira.app.mjs";
 
+// A webhook registered through the REST API expires 30 days after it is created,
+// and Jira stops delivering without reporting anything back to the source. A weekly
+// renewal leaves room for three consecutive runs to fail before that becomes a
+// missed event.
+const WEBHOOK_RENEWAL_SECONDS = 7 * 24 * 60 * 60;
+
 export default {
   props: {
     jira,
     http: {
       type: "$.interface.http",
       customResponse: true,
+    },
+    timer: {
+      label: "Webhook renewal schedule",
+      description: "Jira expires a webhook 30 days after it is registered. **This runs in the background, so you should not need to modify this schedule**. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-webhooks/#api-rest-api-3-webhook-refresh-put)",
+      type: "$.interface.timer",
+      static: {
+        intervalSeconds: WEBHOOK_RENEWAL_SECONDS,
+      },
+      hidden: true,
     },
     db: "$.service.db",
     cloudId: {
@@ -20,6 +35,13 @@ export default {
         "jqlFilter",
       ],
       description: "The JQL filter that specifies which issues the webhook is sent for, only a subset of JQL can be used, e.g. `project = P1` [See supported JQL filters](https://developer.atlassian.com/cloud/jira/service-desk/webhooks/#supported-jql-queries)",
+    },
+    overrideExistingWebhooks: {
+      type: "boolean",
+      label: "Override Existing Webhooks",
+      description: "Override existing webhooks with this new Pipedream source's webhook. Recommend to set this to `true` if you have an existing Jira webhook that you no longer use and want to override with the new Pipedream source.",
+      default: false,
+      optional: true,
     },
   },
   methods: {
@@ -91,9 +113,42 @@ export default {
         ts,
       };
     },
+    async renewHook() {
+      const hookId = this._getHookID();
+      if (!hookId) {
+        console.log("No webhook registered yet, nothing to renew.");
+        return;
+      }
+      const { expirationDate } = await this.jira.refreshHooks({
+        cloudId: this.cloudId,
+        hookIds: [
+          hookId,
+        ],
+      });
+      console.log(`Renewed webhook. (Hook ID: ${hookId}, expires: ${expirationDate})`);
+    },
+    async deleteExistingWebhooks() {
+      const resourcesStream = await this.jira.getResourcesStream({
+        cloudId: this.cloudId,
+        resourceFn: this.jira.getWebhook,
+        resourceFnArgs: {
+          params: {},
+        },
+        resourceFiltererFn: (resource) => resource.values,
+      });
+      for await (const webhook of resourcesStream) {
+        await this.jira.deleteHook({
+          hookId: webhook.id,
+          cloudId: this.cloudId,
+        });
+      }
+    },
   },
   hooks: {
     async activate() {
+      if (this.overrideExistingWebhooks) {
+        await this.deleteExistingWebhooks();
+      }
       const { hookId } = await this.jira.createHook({
         url: this.http.endpoint,
         events: this.getEvents(),
@@ -112,6 +167,12 @@ export default {
     },
   },
   async run(event) {
+    // The timer fires to keep the registration alive, everything else is Jira delivering.
+    if (event.timestamp) {
+      await this.renewHook();
+      return;
+    }
+
     const {
       summary,
       itemType,

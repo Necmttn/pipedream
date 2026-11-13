@@ -4,9 +4,14 @@ import utils from "../../common/utils.mjs";
 export default {
   key: "pinecone-upsert-vector",
   name: "Upsert Vector",
-  description: "Writes vectors into a namespace. If a new value is upserted for an existing vector ID, it will overwrite the previous value. [See the docs](https://docs.pinecone.io/reference/upsert).",
+  description: "Writes vectors into a namespace. If a new value is upserted for an existing vector ID, it will overwrite the previous value. [See the documentation](https://docs.pinecone.io/reference/api/data-plane/upsert).",
   type: "action",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     app,
     indexName: {
@@ -15,25 +20,14 @@ export default {
         "indexName",
       ],
     },
-    projectId: {
-      propDefinition: [
-        app,
-        "projectId",
-      ],
-    },
     id: {
       propDefinition: [
         app,
         "vectorId",
-        ({
-          indexName, projectId,
-        }) => ({
-          indexName,
-          projectId,
-        }),
       ],
     },
     values: {
+      optional: false,
       propDefinition: [
         app,
         "vectorValues",
@@ -54,7 +48,7 @@ export default {
   },
   methods: {
     upsertVector(args = {}) {
-      return this.app.create({
+      return this.app.post({
         path: "/vectors/upsert",
         ...args,
       });
@@ -62,22 +56,22 @@ export default {
   },
   async run({ $: step }) {
     const {
+      upsertVector,
       indexName,
-      projectId,
       id,
       values,
       metadata,
       namespace,
     } = this;
 
-    const response = await this.upsertVector({
-      projectId,
+    const response = await upsertVector({
+      step,
       indexName,
       data: {
         vectors: [
           {
             id,
-            values,
+            values: utils.parseArray(values),
             metadata: utils.parse(metadata),
           },
         ],

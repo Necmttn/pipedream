@@ -4,7 +4,12 @@ export default {
   key: "surveysparrow-create-contact",
   name: "Create Contact",
   description: "Creates a new contact. [See the documentation](https://developers.surveysparrow.com/rest-apis/contacts#postV3Contacts)",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     surveySparrow,
@@ -40,6 +45,7 @@ export default {
   },
   async run({ $ }) {
     const { data: response } = await this.surveySparrow.createContact({
+      $,
       data: {
         email: this.email,
         full_name: this.fullName,
@@ -47,7 +53,6 @@ export default {
         job_title: this.jobTitle,
         contact_type: this.contactType,
       },
-      $,
     });
 
     if (response) {

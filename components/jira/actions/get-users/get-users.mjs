@@ -3,8 +3,13 @@ import jira from "../../jira.app.mjs";
 export default {
   key: "jira-get-users",
   name: "Get Users",
-  description: "Gets details of a list of users. [See docs here](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-users/#api-rest-api-3-users-search-get)",
-  version: "0.0.3",
+  description: "Gets the details for a list of users. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-user-search/#api-rest-api-3-user-search-get)",
+  version: "0.0.21",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     jira,
@@ -22,7 +27,7 @@ export default {
     },
   },
   async run({ $ }) {
-    const response = await this.jira.getUsers({
+    const response = await this.jira.findUsers({
       $,
       cloudId: this.cloudId,
       params: {

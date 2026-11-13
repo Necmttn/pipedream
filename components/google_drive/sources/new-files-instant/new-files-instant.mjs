@@ -1,25 +1,33 @@
-import common from "../common-webhook.mjs";
-import sampleEmit from "./test-event.mjs";
 import {
   GOOGLE_DRIVE_NOTIFICATION_ADD,
   GOOGLE_DRIVE_NOTIFICATION_CHANGE,
-} from "../../constants.mjs";
+} from "../../common/constants.mjs";
+import common from "../common-webhook.mjs";
+import { stashFile } from "../../common/utils.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "google_drive-new-files-instant",
   name: "New Files (Instant)",
-  description: "Emit new event any time a new file is added in your linked Google Drive",
-  version: "0.1.4",
+  description: "Emit new event when a new file is added in your linked Google Drive",
+  version: "0.3.0",
   type: "source",
   dedupe: "unique",
   props: {
     ...common.props,
+    alert: {
+      type: "alert",
+      content: "For shared drives, prefer to use [New Files (Shared Drive)](https://pipedream.com/apps/google-drive/triggers/new-files-shared-drive) instead. \
+      It provides a more reliable way to track changes using polling. \
+      Shared drive notifications may be delayed or incomplete, as they don't immediately reflect all changes made by other users. \
+      For more details, see [Google's documentation](https://developers.google.com/drive/api/guides/about-changes#track_shared_drives).",
+    },
     folders: {
       type: "string[]",
       label: "Folders",
       description:
-        "(Optional) The folders you want to watch for changes. Leave blank to watch for any new file in the Drive.",
+        "(Optional) The folders you want to watch. Leave blank to watch for any new file in the Drive.",
       optional: true,
       default: [],
       options({ prevContext }) {
@@ -39,6 +47,25 @@ export default {
         return this.googleDrive.listFilesOptions(nextPageToken, opts);
       },
     },
+    includeLink: {
+      label: "Include Link",
+      type: "boolean",
+      description: "Upload file to your File Stash and emit temporary download link to the file. Google Workspace documents will be converted to PDF. See [the docs](https://pipedream.com/docs/connect/components/files) to learn more about working with files in Pipedream.",
+      default: false,
+      optional: true,
+    },
+    includeSubfolders: {
+      type: "boolean",
+      label: "Include Subfolders",
+      description: "Whether to watch for new files in subfolders of the parent folder",
+      default: false,
+      optional: true,
+    },
+    dir: {
+      type: "dir",
+      accessMode: "write",
+      optional: true,
+    },
   },
   hooks: {
     async deploy() {
@@ -50,12 +77,12 @@ export default {
         q: `mimeType != "application/vnd.google-apps.folder" and createdTime > "${timeString}" and trashed = false`,
         orderBy: "createdTime desc",
         fields: "*",
-        pageSize: 25,
+        pageSize: 5,
       });
 
       const { files } = await this.googleDrive.listFilesInPage(null, args);
 
-      this.emitFiles(files);
+      await this.emitFiles(files);
     },
     ...common.hooks,
     async activate() {
@@ -71,12 +98,32 @@ export default {
     _setLastFileCreatedTime(lastFileCreatedTime) {
       this.db.set("lastFileCreatedTime", lastFileCreatedTime);
     },
-    shouldProcess(file) {
+    async hasAncestor(file, targetFolderIds) {
+      const MAX_DEPTH = 50;
+      let currentId = file.parents?.[0];
+      if (!currentId) return false;
+
+      for (let i = 0; i < MAX_DEPTH; i++) {
+        if (targetFolderIds.includes(currentId)) return true;
+
+        const data = await this.googleDrive.getFile(currentId, {
+          fields: "parents",
+        });
+
+        if (!data.parents?.length) return false;
+        currentId = data.parents[0];
+      }
+      return false;
+    },
+    async shouldProcess(file) {
       const watchedFolders = new Set(this.folders);
-      return (
-        watchedFolders.size == 0 ||
-        (file.parents && file.parents.some((p) => watchedFolders.has(p)))
-      );
+      if (watchedFolders.size == 0 || !file.parents) {
+        return true;
+      }
+      if (this.includeSubfolders) {
+        return await this.hasAncestor(file, Array.from(watchedFolders));
+      }
+      return file.parents.some((p) => watchedFolders.has(p));
     },
     getUpdateTypes() {
       return [
@@ -84,10 +131,16 @@ export default {
         GOOGLE_DRIVE_NOTIFICATION_CHANGE,
       ];
     },
-    emitFiles(files) {
+    consumesChangedFiles() {
+      return false;
+    },
+    async emitFiles(files) {
       for (const file of files) {
-        if (!this.shouldProcess(file)) {
+        if (!(await this.shouldProcess(file))) {
           continue;
+        }
+        if (this.includeLink) {
+          file.file = await stashFile(file, this.googleDrive, this.dir);
         }
         this.$emit(file, {
           summary: `New File: ${file.name}`,
@@ -112,7 +165,7 @@ export default {
         return;
       }
 
-      this.emitFiles(files);
+      await this.emitFiles(files);
 
       this._setLastFileCreatedTime(Date.parse(files[0].createdTime));
     },

@@ -66,6 +66,30 @@ export default {
       label: "To Date Time",
       description: "Date and time (in ISO-8601 format: `2018-02-18T02:30:00-07:00` or `2018-02-18T08:00:00Z`, where Z stands for UTC) until which to list recorded calls. Returns calls that started up to but excluding specified date and time. If not provided, list ends with most recent call.",
     },
+    callIds: {
+      type: "string[]",
+      label: "Call IDs",
+      description: "List of calls Ids to be filtered. If not supplied, returns all calls between **From Date Time** and **To Date Time**.",
+      optional: true,
+      async options() {
+        const { calls } = await this.listCalls();
+        return calls.map(({
+          id: value, title: label,
+        }) => ({
+          label,
+          value,
+        }));
+      },
+    },
+    limit: {
+      type: "integer",
+      label: "Limit",
+      description: `Maximum number of results to return. Min ${constants.MIN_LIMIT}, max ${constants.MAX_LIMIT}.`,
+      min: constants.MIN_LIMIT,
+      max: constants.MAX_LIMIT,
+      default: constants.DEFAULT_LIMIT,
+      optional: true,
+    },
   },
   methods: {
     exportSummary(step) {
@@ -75,7 +99,9 @@ export default {
       return (msg = "") => step.export(constants.SUMMARY_LABEL, msg);
     },
     getBaseUrl() {
-      return `${constants.BASE_URL}${constants.VERSION_PATH}`;
+      // Gong routes by bearer token, so the generic host works when no per-customer host is set
+      const baseUrl = this.$auth.api_base_url_for_customer || constants.FALLBACK_BASE_URL;
+      return `${baseUrl.replace(/\/+$/, "")}${constants.VERSION_PATH}`;
     },
     getUrl(path) {
       return `${this.getBaseUrl()}${path}`;
@@ -117,6 +143,12 @@ export default {
         ...args,
       });
     },
+    listUsersExtensive(args = {}) {
+      return this.post({
+        path: "/users/extensive",
+        ...args,
+      });
+    },
     listWorkspaces(args = {}) {
       return this.makeRequest({
         path: "/workspaces",
@@ -129,24 +161,59 @@ export default {
         ...args,
       });
     },
+    listCallsExtensive(args = {}) {
+      return this.post({
+        path: "/calls/extensive",
+        ...args,
+      });
+    },
+    listCallTranscripts(args = {}) {
+      return this.post({
+        path: "/calls/transcript",
+        ...args,
+      });
+    },
+    listLibraryFolders(args = {}) {
+      return this.makeRequest({
+        path: "/library/folders",
+        ...args,
+      });
+    },
+    listLibraryFolderContent(args = {}) {
+      return this.makeRequest({
+        path: "/library/folder-content",
+        ...args,
+      });
+    },
     async *getResourcesStream({
       resourceFn,
       resourceFnArgs,
       resourceName,
       max = constants.DEFAULT_MAX,
+      cursorIn = "params",
     }) {
       let cursor;
       let resourcesCount = 0;
+      let response;
 
       while (true) {
-        const response =
+        try {
+          response =
           await resourceFn({
             ...resourceFnArgs,
-            params: {
-              ...resourceFnArgs?.params,
+            [cursorIn]: {
+              ...resourceFnArgs?.[cursorIn],
               cursor,
             },
           });
+        } catch (error) {
+          // Gong returns 404 when a filter matches nothing
+          if (error?.response?.status === 404) {
+            console.log("No more resources");
+            return;
+          }
+          throw error;
+        }
 
         const nextResources = resourceName && response[resourceName] || response;
 

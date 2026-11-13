@@ -1,4 +1,9 @@
-import { axios } from "@pipedream/platform";
+import { Client } from "@microsoft/microsoft-graph-client";
+import "isomorphic-fetch";
+import {
+  GRAPH_VERSION_PATH, ROOT_FOLDER_ID,
+} from "./common/constants.mjs";
+const DEFAULT_LIMIT = 50;
 
 export default {
   type: "app",
@@ -6,25 +11,27 @@ export default {
   propDefinitions: {
     folderId: {
       type: "string",
-      label: "Folder Id",
-      description: "The ID of the folder where the item is located.",
+      label: "Folder ID",
+      description: "The ID of the folder where the item is located",
       async options() {
-        const folders = await this.listFolders();
+        const folders = await this.listFolderOptions();
         return [
-          "root",
+          {
+            label: "Root",
+            value: ROOT_FOLDER_ID,
+          },
           ...folders,
         ];
       },
     },
-    itemId: {
+    sheetId: {
       type: "string",
-      label: "Item Id",
-      description: "The Id of the item you want to use.",
+      label: "Sheet ID",
+      description: "The ID of the spreadsheet you want to use",
       async options({ folderId }) {
         const { value } = await this.listItems({
           folderId,
         });
-
         return value.filter(
           (item) => item.file?.mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ).map(({
@@ -35,18 +42,35 @@ export default {
         }));
       },
     },
-    rowId: {
+    worksheet: {
       type: "string",
-      label: "Row Id",
-      description: "The Id of the row you want to use.",
+      label: "Worksheet",
+      description: "The name of the worksheet to use",
       async options({
-        itemId, tableId,
+        sheetId, page,
       }) {
-        const { value } = await this.listRows({
-          itemId,
+        const limit = DEFAULT_LIMIT;
+        const { value } = await this.listWorksheets({
+          sheetId,
+          params: {
+            $top: limit,
+            $skip: limit * page,
+          },
+        });
+        return value.map(({ name }) => name );
+      },
+    },
+    tableRowId: {
+      type: "string",
+      label: "Row ID",
+      description: "The ID of the row you want to use",
+      async options({
+        sheetId, tableId,
+      }) {
+        const { value } = await this.listTableRows({
+          sheetId,
           tableId,
         });
-
         return value.map(({
           index: value, values,
         }) => ({
@@ -57,13 +81,12 @@ export default {
     },
     tableId: {
       type: "string",
-      label: "Table Id",
-      description: "The Id of the table you want to use.",
-      async options({ itemId }) {
+      label: "Table ID",
+      description: "The ID of the table you want to use",
+      async options({ sheetId }) {
         const { value } = await this.listTables({
-          itemId,
+          sheetId,
         });
-
         return value.map(({
           id: value, name: label,
         }) => ({
@@ -75,126 +98,214 @@ export default {
     values: {
       type: "string",
       label: "Values",
-      description: "A 2-dimensional array of unformatted values of the table row. [See the documentation to get the data format](https://learn.microsoft.com/en-us/graph/api/tablerowcollection-add?view=graph-rest-1.0&tabs=http).",
+      description: "A 2-dimensional array of unformatted values of the table row. E.g. `[[1, 2, 3], [4, 5, 6]]` according to the table schema. [See the documentation to get the data format](https://learn.microsoft.com/en-us/graph/api/tablerowcollection-add?view=graph-rest-1.0&tabs=http).",
     },
   },
   methods: {
-    _apiUrl() {
-      return "https://graph.microsoft.com/v1.0";
-    },
-    _getHeaders() {
-      return {
-        "Authorization": `Bearer ${this.$auth.oauth_access_token}`,
-      };
-    },
-    _makeRequest({
-      $ = this, path, ...opts
-    }) {
-      const config = {
-        url: `${this._apiUrl()}/${path}`,
-        headers: this._getHeaders(),
-        ...opts,
-      };
-
-      return axios($, config);
-    },
-    addRow({
-      itemId, tableId, ...args
-    }) {
-      return this._makeRequest({
-        method: "POST",
-        path: `me/drive/items/${itemId}/workbook/tables/${tableId}/rows`,
-        ...args,
+    client() {
+      return Client.init({
+        authProvider: (done) => {
+          done(null, this.$auth.oauth_access_token);
+        },
       });
     },
-    createHook(args = {}) {
-      return this._makeRequest({
-        method: "POST",
-        path: "subscriptions",
-        ...args,
-      });
+    addTableRow({
+      sheetId, tableId, tableName, data = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/tables/${tableId || tableName}/rows/add`)
+        .post(data);
+    },
+    createItem({
+      folderId, data = {},
+    } = {}) {
+      return this.client().api((!folderId || folderId === ROOT_FOLDER_ID)
+        ? "/me/drive/root/children"
+        : `/me/drive/items/${folderId}/children`)
+        .post(data);
+    },
+    addWorksheet({
+      sheetId, data = {},
+    } = {}) {
+      // Use the documented worksheetCollection: add action, matching addTableRow's
+      // `/rows/add` pattern above. (A plain POST to the collection also works, but this
+      // is the canonical endpoint.)
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/worksheets/add`)
+        .post(data);
+    },
+    createHook({ data = {} } = {}) {
+      return this.client().api("/subscriptions")
+        .post(data);
     },
     deleteHook(hookId) {
-      return this._makeRequest({
-        method: "DELETE",
-        path: `subscriptions/${hookId}`,
-      });
-    },
-    async listFolders({
-      folderId = null,
-      prefix = "", ...args
-    } = {}) {
-      const foldersArray = [];
-      const { value: items } = await this._makeRequest({
-        path: folderId
-          ? `/me/drive/items/${folderId}/children`
-          : "me/drive/root/children",
-        ...args,
-      });
-
-      const folders = items.filter((item) => item.folder);
-      for (const {
-        id, name, folder: { childCount = null },
-      } of folders) {
-        foldersArray.push({
-          value: id,
-          label: `${prefix}${name}`,
-        });
-
-        if (childCount) {
-          const children = await this.listFolders({
-            folderId: id,
-            prefix: prefix + "-",
-          });
-          foldersArray.push(...children);
-        }
-      }
-
-      return foldersArray;
+      return this.client().api(`/subscriptions/${hookId}`)
+        .delete();
     },
     listItems({
-      folderId, ...args
-    }) {
-      return this._makeRequest({
-        path: (folderId === "root")
-          ? "me/drive/root/children"
-          : `/me/drive/items/${folderId}/children`,
-        ...args,
-      });
+      folderId, params = {},
+    } = {}) {
+      return this.client().api((folderId === ROOT_FOLDER_ID)
+        ? "/me/drive/root/children"
+        : `/me/drive/items/${folderId}/children`)
+        .get(params);
     },
-    listRows({
-      itemId, tableId, ...args
-    }) {
-      return this._makeRequest({
-        path: `me/drive/items/${itemId}/workbook/tables/${tableId}/rows`,
-        ...args,
-      });
+    listTableRows({
+      sheetId, tableId,
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/tables/${tableId}/rows`)
+        .get();
     },
+    // List tables endpoint is not supported for personal accounts
     listTables({
-      itemId, ...args
-    }) {
-      return this._makeRequest({
-        path: `me/drive/items/${itemId}/workbook/tables`,
-        ...args,
-      });
+      sheetId, params = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/tables`)
+        .get(params);
     },
-    updateRow({
-      itemId, tableId, rowId, ...args
-    }) {
-      return this._makeRequest({
-        method: "PATCH",
-        path: `me/drive/items/${itemId}/workbook/tables/${tableId}/rows/itemAt(index=${rowId})`,
-        ...args,
-      });
+    listWorksheets({
+      sheetId, params = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/worksheets`)
+        .get(params);
+    },
+    updateTableRow({
+      sheetId, tableId, rowId, data = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/tables/${tableId}/rows/ItemAt(index=${rowId})`)
+        .patch(data);
     },
     updateSubscription({
-      hookId, ...args
-    }) {
-      return this._makeRequest({
-        method: "PATCH",
-        path: `subscriptions/${hookId}`,
-        ...args,
-      });
+      hookId, data = {},
+    } = {}) {
+      return this.client().api(`/subscriptions/${hookId}`)
+        .patch(data);
+    },
+    batch({ data = {} } = {}) {
+      return this.client().api("/$batch")
+        .post(data);
+    },
+    getDriveItem({
+      itemId, params = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${itemId}`)
+        .get(params);
+    },
+    getDelta({
+      path, token, params = {},
+    } = {}) {
+      return this.client().api(`${path}/delta?token=${token}`)
+        .get(params);
+    },
+    getRange({
+      sheetId, worksheet, range, params = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/worksheets/${worksheet}/range(address='${range}')`)
+        .get(params);
+    },
+    getUsedRange({
+      sheetId, worksheet, params = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/worksheets/${worksheet}/usedRange`)
+        .get(params);
+    },
+    insertRange({
+      sheetId, worksheet, range, data = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/worksheets/${worksheet}/range(address='${range}')/insert`)
+        .post(data);
+    },
+    updateRange({
+      sheetId, worksheet, range, data = {},
+    } = {}) {
+      return this.client().api(`/me/drive/items/${sheetId}/workbook/worksheets/${worksheet}/range(address='${range}')`)
+        .patch(data);
+    },
+    async listFolderOptions({
+      folderId = null, prefix = "", batchLimit = 20,
+    } = {}) {
+      const options = [];
+      const stack = [
+        {
+          folderId,
+          prefix,
+        },
+      ];
+      const history = [];
+
+      while (stack.length) {
+        const currentBatch = [];
+        const pending = {};
+        while (stack.length && currentBatch.length < batchLimit) {
+          const {
+            folderId,
+            prefix,
+            url,
+          } = stack.shift();
+          history.push({
+            folderId,
+            prefix,
+          });
+          const id = folderId || ROOT_FOLDER_ID;
+          pending[id] = {
+            folderId,
+            prefix,
+          };
+          currentBatch.push({
+            id,
+            method: "GET",
+            url: url || (folderId
+              ? `/me/drive/items/${folderId}/children`
+              : "/me/drive/root/children"),
+          });
+        }
+
+        const { responses: batchResponses } =
+          await this.batch({
+            data: {
+              requests: currentBatch,
+            },
+          });
+
+        batchResponses.forEach(({
+          id, status, body,
+        }) => {
+          if (status === 200) {
+            const nextLink = body["@odata.nextLink"];
+            if (nextLink) {
+              const {
+                pathname, search,
+              } = new URL(nextLink);
+              stack.push({
+                ...pending[id],
+                url: `${pathname.replace(GRAPH_VERSION_PATH, "")}${search}`,
+              });
+            }
+            body.value.filter(({ folder }) => folder).forEach((item) => {
+              const {
+                id, name, folder: { childCount }, parentReference: { id: parentId },
+              } = item;
+              const prefix = history.find(({ folderId }) => folderId === parentId)?.prefix || "";
+              const currentLabel = `${prefix}${name}`;
+              options.push({
+                value: id,
+                label: currentLabel,
+              });
+
+              if (childCount) {
+                stack.push({
+                  folderId: id,
+                  prefix: `${currentLabel}/`,
+                });
+              }
+            });
+          } else if (id === ROOT_FOLDER_ID) {
+            throw new Error(`Failed to list folders: ${JSON.stringify(body)}`);
+          } else {
+            console.error(`Error in batch request ${id}:`, JSON.stringify(body));
+          }
+        });
+      }
+
+      return options;
     },
   },
 };

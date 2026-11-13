@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/streak",
-  "version": "0.0.4",
+  "version": "1.0.0",
   "description": "Pipedream Streak Components",
   "main": "streak.app.mjs",
   "keywords": [
@@ -10,7 +10,7 @@
   "homepage": "https://pipedream.com/apps/streak",
   "author": "Pipedream <support@pipedream.com> (https://pipedream.com/)",
   "dependencies": {
-    "@pipedream/platform": "^1.1.1"
+    "@pipedream/platform": "^1.6.8"
   },
   "publishConfig": {
     "access": "public"

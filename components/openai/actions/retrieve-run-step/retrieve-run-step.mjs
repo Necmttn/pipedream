@@ -4,7 +4,12 @@ export default {
   key: "openai-retrieve-run-step",
   name: "Retrieve Run Step (Assistants)",
   description: "Retrieve a specific run step in a thread. [See the documentation](https://platform.openai.com/docs/api-reference/runs/getRunStep)",
-  version: "0.0.6",
+  version: "0.0.19",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     openai,
@@ -27,11 +32,18 @@ export default {
       propDefinition: [
         openai,
         "stepId",
+        ({
+          threadId, runId,
+        }) => ({
+          threadId,
+          runId,
+        }),
       ],
     },
   },
   async run({ $ }) {
     const response = await this.openai.retrieveRunStep({
+      $,
       threadId: this.threadId,
       runId: this.runId,
       stepId: this.stepId,

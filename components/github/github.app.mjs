@@ -1,9 +1,11 @@
 import { Octokit } from "@octokit/core";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
-import queries from "./common/queries.mjs";
 import {
   axios, ConfigurationError,
 } from "@pipedream/platform";
+import constants from "./actions/common/constants.mjs";
+import mutations from "./common/mutations.mjs";
+import queries from "./common/queries.mjs";
 
 const CustomOctokit = Octokit.plugin(paginateRest);
 
@@ -13,7 +15,7 @@ export default {
   propDefinitions: {
     orgName: {
       label: "Organization",
-      description: "The name of the Github organization. The name is not case sensitive.",
+      description: "The name of the GitHub organization (not case sensitive).",
       type: "string",
       async options() {
         const organizations = await this.getOrganizations();
@@ -23,7 +25,7 @@ export default {
     },
     repoFullname: {
       label: "Repository",
-      description: "The name of the repository. The name is not case sensitive",
+      description: "The name of the repository (not case sensitive). The format should be `owner/repo` (for example, `PipedreamHQ/pipedream`).",
       type: "string",
       async options({ org }) {
         const repositories = await this.getRepos({
@@ -32,6 +34,52 @@ export default {
 
         return repositories.map((repository) => repository.full_name);
       },
+    },
+    // Static, MCP-friendly variants of `repoFullname` / `issueNumber`. These omit
+    // the `async options()` dropdowns above so AI-optimized actions resolve in a
+    // single call instead of dragging in configure_component/retrieve_options
+    // round-trips. GitHub identifiers are human-readable, so dropdowns add no value.
+    repoFullnameStatic: {
+      label: "Repository",
+      description: "The repository in `owner/repo` format, for example `PipedreamHQ/pipedream` (not case sensitive). If you pass just a repository name with no owner (e.g. `my-repo`), the authenticated user is assumed as the owner — convenient for \"my repo\" requests. Do NOT repeat the repository name as the owner (e.g. `my-repo/my-repo`); if you don't know the owner, pass only the name or run **List Repositories** to find it.",
+      type: "string",
+    },
+    issueNumberStatic: {
+      label: "Issue Number",
+      description: "The issue number — the `#N` shown in the GitHub UI, not the global issue ID. Use **Search Issues and Pull Requests** or **Get Issue** to find it when you only know the title.",
+      type: "integer",
+    },
+    pullNumberStatic: {
+      label: "Pull Request Number",
+      description: "The pull request number — the `#N` shown in the GitHub UI. Use **Search Issues and Pull Requests** with `is:pr` or **Get Pull Request** to find it when you only know the title.",
+      type: "integer",
+    },
+    // Static, MCP-friendly props for the Projects (V2) discovery chain
+    // (List Projects → List Project Statuses / List Project Items). No
+    // `async options()` dropdowns — Projects V2 are addressed by their
+    // human-readable org login + number. User-owned Projects are not supported.
+    projectOwnerStatic: {
+      label: "Owner",
+      description: "The account that owns the Project (V2) — an organization login (e.g. `my-org`), or a repository owner when **Repository** is also set. **Required, and it must come from the user.** If the user has not said which owner/organization the project belongs to, ask them — do NOT guess an owner or enumerate organizations to find one. If they named an organization but you need its exact login, use **List Organizations**. User-owned Projects are not supported.",
+      type: "string",
+    },
+    projectRepoStatic: {
+      label: "Repository",
+      description: "Optional. The repository name **without** the owner (e.g. `my-repo`, not `my-org/my-repo`) when the Project (V2) is repository-scoped. Leave blank to target an organization-owned Project.",
+      type: "string",
+      optional: true,
+    },
+    projectNumberStatic: {
+      label: "Project Number",
+      description: "The Project (V2) number as shown in the project URL and UI (e.g. `5` in `/orgs/my-org/projects/5`) — not the node ID. **Required.** If the user has not provided it, ask them — do NOT guess. Once you know the owner, you can look up numbers with **List Projects**.",
+      type: "integer",
+    },
+    maxResults: {
+      type: "integer",
+      label: "Max Results",
+      description: "The maximum number of results to return. Defaults to `100`.",
+      default: 100,
+      optional: true,
     },
     repoOrg: {
       label: "Organization Repository",
@@ -96,19 +144,39 @@ export default {
     },
     status: {
       label: "Item Status",
-      description: "The status for a project item",
-      type: "string",
+      description: "The status(es) to emit events for. If not specified, events will be emitted for all statuses.",
+      type: "string[]",
       async options({
         org, repo, project,
       }) {
-        const { statuses } = await this.getProjectV2Statuses({
+        const { options } = await this.getProjectV2StatusField({
           repoOwner: org,
           repoName: repo,
           project,
         });
 
-        return statuses.map((status) => ({
+        return options.map((status) => ({
           label: status.name,
+          value: status.id,
+        }));
+      },
+    },
+    projectItem: {
+      label: "Project (V2) Item",
+      description: "The project item to update",
+      type: "string",
+      async options({
+        org, repo, project,
+      }) {
+        const items = await this.getProjectV2Items({
+          repoOwner: org,
+          repoName: repo,
+          project,
+          amount: 100,
+        });
+
+        return items.map((status) => ({
+          label: status.fieldValueByName?.text ?? status.id,
           value: status.id,
         }));
       },
@@ -141,12 +209,15 @@ export default {
       label: "Issue Number",
       description: "The issue number",
       type: "integer",
-      async options({ repoFullname }) {
+      async options({
+        repoFullname, page = 0,
+      }) {
         const issues = await this.getRepositoryIssues({
+          page: page + 1,
           repoFullname,
         });
 
-        return issues.map((issue) => ({
+        return issues?.filter?.((issue) => !issue.pull_request).map((issue) => ({
           label: issue.title,
           value: +issue.number,
         }));
@@ -161,9 +232,7 @@ export default {
       }) {
         const branches = await this.getBranches({
           repoFullname,
-          params: {
-            page: page + 1,
-          },
+          page: page + 1,
         });
 
         return branches.map((branch) => ({
@@ -176,14 +245,32 @@ export default {
       type: "integer",
       label: "PR Number",
       description: "A pull request number",
-      async options({ repoFullname }) {
+      async options({
+        repoFullname, page = 0,
+      }) {
         const prs = await this.getRepositoryPullRequests({
+          page: page + 1,
           repoFullname,
         });
 
         return prs.map((pr) => ({
           label: pr.title,
           value: +pr.number,
+        }));
+      },
+    },
+    milestoneNumber: {
+      type: "integer",
+      label: "Milestone Number",
+      description: "The number of a milestone to associate this issue with.",
+      async options({ repoFullname }) {
+        const items = await this.getRepositoryMilestones({
+          repoFullname,
+        });
+
+        return items.map((item) => ({
+          label: item.title,
+          value: +item.number,
         }));
       },
     },
@@ -231,6 +318,82 @@ export default {
         }));
       },
     },
+    workflowId: {
+      type: "string",
+      label: "Workflow Id",
+      description: "The Id of the workflow.",
+      async options({
+        repoFullname, page,
+      }) {
+        const { workflows: items } = await this.listWorkflows({
+          repoFullname,
+          perPage: constants.LIMIT,
+          page,
+        });
+
+        return items.map(({
+          id: value, name: label,
+        }) => ({
+          label,
+          value,
+        }));
+      },
+    },
+    workflowRunId: {
+      type: "string",
+      label: "Workflow Run Id",
+      description: "The Id of the workflow Run.",
+      async options({
+        repoFullname, page,
+      }) {
+        const { workflow_runs: items } = await this.listWorkflowRuns({
+          repoFullname,
+          perPage: constants.LIMIT,
+          page,
+        });
+
+        return items.map(({
+          id: value, name: label,
+        }) => ({
+          label,
+          value,
+        }));
+      },
+    },
+    branchSha: {
+      label: "Branch SHA",
+      description: "SHA of a branch",
+      type: "string",
+      async options({
+        page, repoFullname,
+      }) {
+        const branches = await this.getBranches({
+          repoFullname,
+          per_page: constants.LIMIT,
+          page: page + 1,
+        });
+
+        return branches.map((branch) => ({
+          label: branch.name,
+          value: branch.commit.sha,
+        }));
+      },
+    },
+    commitSha: {
+      type: "string",
+      label: "Commit SHA",
+      description: "A commit SHA to retrieve",
+      async options({
+        repoFullname, page,
+      }) {
+        const commits = await this.listCommits({
+          repoFullname,
+          per_page: constants.LIMIT,
+          page: page + 1,
+        });
+        return commits.map((commit) => commit.sha);
+      },
+    },
   },
   methods: {
     _baseApiUrl() {
@@ -269,7 +432,7 @@ export default {
       console.error(exception);
       const status = exception?.status;
       if (status && (status === 404 || status === 403)) {
-        throw new ConfigurationError(`The request failed with status "${status}". It is likely that your token doesn't have sufficient permissions to execute that request. [see mor information here](https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api?apiVersion=2022-11-28#about-authentication).`);
+        throw new ConfigurationError(`The request failed with status "${status}". It's likely that your connected account doesn't have sufficient permissions to execute that request. [See more information here](https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api?apiVersion=2022-11-28#about-authentication).`);
       }
       throw exception;
     },
@@ -297,16 +460,18 @@ export default {
     }) {
       return this._client().request(`DELETE /orgs/${org}/hooks/${webhookId}`, {});
     },
-    async getOrganizations() {
-      const response = await this._client().request("GET /user/orgs", {});
+    async getOrganizations(data = {}) {
+      const response = await this._client().request("GET /user/orgs", data);
 
       return response.data;
     },
     async getRepos() {
       return this._client().paginate("GET /user/repos", {});
     },
-    async getOrgRepos({ org }) {
-      return this._client().paginate(`GET /orgs/${org}/repos`, {});
+    async getOrgRepos({
+      org, ...args
+    }) {
+      return this._client().paginate(`GET /orgs/${org}/repos`, args);
     },
     async getRepo({ repoFullname }) {
       const response = await this._client().request(`GET /repos/${repoFullname}`, {});
@@ -317,6 +482,7 @@ export default {
       repoFullname,
       path,
       mediaType,
+      ...args
     }) {
       return this._makeRequest({
         path: `/repos/${repoFullname}/contents/${path}`,
@@ -325,24 +491,57 @@ export default {
             Accept: mediaType,
           },
         }),
+        ...args,
       });
     },
-    async getRepositoryLabels({ repoFullname }) {
-      return this._client().paginate(`GET /repos/${repoFullname}/labels`, {});
+    // Paginate but stop early once `maxResults` rows are collected, so callers
+    // that only want a bounded slice don't pull every page. When `maxResults`
+    // is omitted (e.g. the propDefinition option loaders), all pages are
+    // fetched — preserving the previous behavior.
+    async _paginateWithLimit(route, maxResults, params = {}) {
+      const results = [];
+      // A defined, non-positive limit means "no rows" — return before paging.
+      if (maxResults != null && maxResults <= 0) {
+        return results;
+      }
+      for await (const { data } of this._client().paginate.iterator(route, {
+        per_page: 100,
+        ...params,
+      })) {
+        results.push(...data);
+        if (maxResults != null && results.length >= maxResults) {
+          break;
+        }
+      }
+      // Only `undefined`/`null` means unlimited; slice for any defined limit.
+      return maxResults != null
+        ? results.slice(0, maxResults)
+        : results;
     },
-    async getRepositoryCollaborators({ repoFullname }) {
-      return this._client().paginate(`GET /repos/${repoFullname}/collaborators`, {});
+    async getRepositoryLabels({
+      repoFullname, maxResults,
+    }) {
+      return this._paginateWithLimit(`GET /repos/${repoFullname}/labels`, maxResults);
     },
-    async getRepositoryIssues({ repoFullname }) {
-      return this._client().paginate(`GET /repos/${repoFullname}/issues`, {
+    async getRepositoryCollaborators({
+      repoFullname, maxResults,
+    }) {
+      return this._paginateWithLimit(`GET /repos/${repoFullname}/collaborators`, maxResults);
+    },
+    async getRepositoryIssues({
+      repoFullname, ...args
+    }) {
+      const results = await this._client().request(`GET /repos/${repoFullname}/issues`, {
         state: "all",
+        ...args,
       });
+      return results.data;
     },
     async getRepositoryProjects({ repoFullname }) {
       return this._client().paginate(`GET /repos/${repoFullname}/projects`, {});
     },
     async getProjectsV2({
-      repoOwner, repoName, cursor,
+      repoOwner, repoName, cursor, first = 10,
     }) {
       const response = await this.graphql(repoName
         ? queries.projectsQuery
@@ -350,15 +549,18 @@ export default {
         repoOwner,
         repoName,
         cursor,
+        first,
       });
+      const pageInfo = response?.repository?.projectsV2?.pageInfo ??
+        response?.organization?.projectsV2?.pageInfo;
       return {
         projects: response?.repository?.projectsV2?.nodes ??
           response?.organization?.projectsV2?.nodes,
-        nextCursor: response?.repository?.projectsV2?.pageInfo?.endCursor ??
-          response?.organization?.projectsV2?.pageInfo?.endCursor,
+        nextCursor: pageInfo?.endCursor,
+        hasNextPage: pageInfo?.hasNextPage ?? false,
       };
     },
-    async getProjectV2Statuses({
+    async getProjectV2StatusField({
       repoOwner, repoName, project,
     }) {
       const response = await this.graphql(repoName ?
@@ -369,10 +571,56 @@ export default {
         project,
       });
 
-      return {
-        statuses: response?.repository?.projectV2?.field?.options ??
-          response?.organization?.projectV2?.field?.options,
-      };
+      return (response.repository ?? response.organization).projectV2?.field;
+
+    },
+    async getProjectV2Id({
+      repoOwner, repoName, project,
+    }) {
+      const response = await this.graphql(repoName ?
+        queries.repoProjectIdQuery :
+        queries.orgProjectIdQuery, {
+        repoOwner,
+        repoName,
+        project,
+      });
+
+      return (response.repository ?? response.organization).projectV2?.id;
+
+    },
+    async getProjectV2Items({
+      repoName, repoOwner, project, amount,
+    }) {
+      const response = await this.graphql(repoName ?
+        queries.projectItemsQuery :
+        queries.organizationProjectItemsQuery,
+      {
+        repoOwner,
+        repoName,
+        project,
+        amount,
+      });
+
+      return (response.repository ?? response.organization).projectV2?.items?.nodes;
+    },
+    async updateProjectV2ItemStatus({
+      projectId, itemId, fieldId, value,
+    }) {
+      return this.graphql(mutations.updateProjectItemMutation, {
+        projectId,
+        itemId,
+        fieldId,
+        value,
+      });
+    },
+    async updateProjectV2ItemPosition({
+      projectId, itemId,
+    }) {
+      return this.graphql(mutations.updateProjectItemPositionMutation, {
+        projectId,
+        itemId,
+        afterId: null,
+      });
     },
     async getProjectColumns({ project }) {
       return this._client().paginate(`GET /projects/${project}/columns`, {});
@@ -398,6 +646,42 @@ export default {
       const response = await this._client().request("GET /user", {});
 
       return response.data;
+    },
+    // AI-optimization: accept a bare repo name (no owner). When the model is told
+    // "my repo X" it often passes just `X`; GitHub needs `owner/repo`, so we
+    // assume the authenticated user as the owner when no `/` is present.
+    async _resolveRepoFullname(repoFullname) {
+      if (typeof repoFullname === "string" && repoFullname) {
+        // Bare repo name (no owner) → assume the authenticated user.
+        if (!repoFullname.includes("/")) {
+          const { login } = await this.getAuthenticatedUser();
+          return `${login}/${repoFullname}`;
+        }
+        // Common LLM mistake: duplicating the repo name into the owner slot
+        // (e.g. "my-repo/my-repo") when the owner is unknown. Treat the doubled
+        // form as a bare name and assume the authenticated user as the owner.
+        // GitHub owner/repo names are case-insensitive, so compare accordingly
+        // (e.g. "My-Repo/my-repo" is also a doubled name).
+        const parts = repoFullname.split("/");
+        if (parts.length === 2 && parts[0] && parts[0].toLowerCase() === parts[1].toLowerCase()) {
+          const { login } = await this.getAuthenticatedUser();
+          return `${login}/${parts[1]}`;
+        }
+      }
+      return repoFullname;
+    },
+    // Same fix for the search DSL: `repo:my-repo` is invalid (needs owner/repo).
+    // Rewrite any slash-less `repo:` qualifier to `repo:{login}/{name}`.
+    async _resolveSearchQuery(query) {
+      const bareRepo = /repo:([^\s/]+)(?=\s|$)/;
+      if (typeof query === "string" && bareRepo.test(query)) {
+        const { login } = await this.getAuthenticatedUser();
+        return query.replace(
+          new RegExp(bareRepo.source, "g"),
+          (match, name) => `repo:${login}/${name}`,
+        );
+      }
+      return query;
     },
     async getFromUrl({ url }) {
       const response = await this._client().request(`GET ${url.replace(this._baseApiUrl(), "")}`, {});
@@ -427,6 +711,13 @@ export default {
       repoFullname, data,
     }) {
       const response = await this._client().request(`POST /repos/${repoFullname}/pulls`, data);
+
+      return response.data;
+    },
+    async updatePullRequest({
+      repoFullname, pullNumber, data,
+    }) {
+      const response = await this._client().request(`PATCH /repos/${repoFullname}/pulls/${pullNumber}`, data);
 
       return response.data;
     },
@@ -482,10 +773,20 @@ export default {
         }
       }
 
-      return issues;
+      // Slice the array to ensure exactly maxResults items are returned
+      return issues.slice(0, maxResults);
     },
-    async getRepositoryPullRequests({ repoFullname }) {
-      return this._client().paginate(`GET /repos/${repoFullname}/pulls`, {});
+    async getRepositoryPullRequests({
+      repoFullname, ...args
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/pulls`, args ?? {});
+      return response.data;
+    },
+    async getPullRequest({
+      repoFullname, pullNumber,
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/pulls/${pullNumber}`, {});
+      return response.data;
     },
     async getPullRequestForCommit({
       repoFullname, sha,
@@ -497,9 +798,9 @@ export default {
     async getReviewsForPullRequest({
       repoFullname, pullNumber,
     }) {
-      const response = await this._client().request(`GET /repos/${repoFullname}/pulls/${pullNumber}/reviews`, {});
-
-      return response.data;
+      return this._client().paginate(`GET /repos/${repoFullname}/pulls/${pullNumber}/reviews`, {
+        per_page: 100,
+      });
     },
     async getCommits({
       repoFullname, ...data
@@ -539,6 +840,11 @@ export default {
       const fileExists = await this._makeRequest({
         path: `/repos/${repoFullname}/contents/${path}`,
         validateStatus: () => true,
+        ...(branch && {
+          params: {
+            ref: branch,
+          },
+        }),
       });
       if (fileExists.sha) {
         console.log("File exists, overwriting.");
@@ -585,10 +891,79 @@ export default {
 
       return response.data;
     },
+    async listWorkflows({
+      repoFullname,
+      perPage,
+      page,
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/actions/workflows`, {
+        per_page: perPage,
+        page: page,
+      });
+
+      return response.data;
+    },
+    async listWorkflowRuns({
+      repoFullname,
+      perPage,
+      page,
+      ...args
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/actions/runs`, {
+        per_page: perPage,
+        page: page,
+        ...args,
+      });
+
+      return response.data;
+    },
+    async getWorkflowRun({
+      repoFullname, workflowRunId,
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/actions/runs/${workflowRunId}`);
+
+      return response.data;
+    },
+    createWorkflowDispatch({
+      repoFullname,
+      workflowId,
+      ...opts
+    }) {
+      return this._makeRequest({
+        method: "POST",
+        path: `/repos/${repoFullname}/actions/workflows/${workflowId}/dispatches`,
+        ...opts,
+      });
+    },
+    disableWorkflow({
+      repoFullname,
+      workflowId,
+    }) {
+      return this._makeRequest({
+        method: "PUT",
+        path: `/repos/${repoFullname}/actions/workflows/${workflowId}/disable`,
+      });
+    },
+    enableWorkflow({
+      repoFullname,
+      workflowId,
+    }) {
+      return this._makeRequest({
+        method: "PUT",
+        path: `/repos/${repoFullname}/actions/workflows/${workflowId}/enable`,
+      });
+    },
     async getUserRepoPermissions({
       repoFullname, username,
     }) {
       const response = await this._client().request(`GET /repos/${repoFullname}/collaborators/${username}/permission`, {});
+
+      return response.data;
+    },
+    async getOrgUserInfo({
+      org, username,
+    }) {
+      const response = await this._client().request(`GET /orgs/${org}/memberships/${username}`, {});
 
       return response.data;
     },
@@ -660,15 +1035,17 @@ export default {
       return response.data;
     },
     async getRepositoryMilestones({
-      repoFullname, ...args
+      repoFullname, maxResults, ...args
     }) {
-      const response = await this._client().request(`GET /repos/${repoFullname}/milestones`, {
-        ...args,
-        per_page: 100,
+      // Paginate (bounded by maxResults) rather than a single page, so large
+      // milestone sets are reachable. `state` default comes first so a
+      // caller-supplied `state` (spread via `...args`) overrides it; without
+      // one, GitHub defaults to `open`, which the `milestoneNumber`
+      // propDefinition relies on (it passes no maxResults, so all are fetched).
+      return this._paginateWithLimit(`GET /repos/${repoFullname}/milestones`, maxResults, {
         state: "open",
+        ...args,
       });
-
-      return response.data;
     },
     async getRepositoryStargazers({
       repoFullname, ...args
@@ -678,6 +1055,78 @@ export default {
         per_page: 100,
       });
 
+      return response.data;
+    },
+    async starRepo({
+      repoFullname, ...args
+    }) {
+      const response = await this._client().request(`PUT /user/starred/${repoFullname}`, {
+        ...args,
+      });
+
+      return response.data;
+    },
+    async getCommit({
+      repoFullname, commitRef,
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/commits/${commitRef}`, {});
+      return response.data;
+    },
+    async listCommits({
+      repoFullname, ...args
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/commits`, args);
+      return response.data;
+    },
+    async mergePullRequest({
+      repoFullname, pullNumber, data,
+    }) {
+      const response = await this._client().request(`PUT /repos/${repoFullname}/pulls/${pullNumber}/merge`, data);
+      return response.data;
+    },
+    async createPullRequestReview({
+      repoFullname, pullNumber, data,
+    }) {
+      const response = await this._client().request(`POST /repos/${repoFullname}/pulls/${pullNumber}/reviews`, data);
+      return response.data;
+    },
+    async getPullRequestFiles({
+      repoFullname, pullNumber,
+    }) {
+      return this._client().paginate(`GET /repos/${repoFullname}/pulls/${pullNumber}/files`, {
+        per_page: 100,
+      });
+    },
+    async getCommitStatus({
+      repoFullname, ref,
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/commits/${ref}/status`, {});
+      return response.data;
+    },
+    async getCheckRunsForRef({
+      repoFullname, ref,
+    }) {
+      return this._client().paginate(`GET /repos/${repoFullname}/commits/${ref}/check-runs`, {
+        per_page: 100,
+      });
+    },
+    async getRef({
+      repoFullname, ref,
+    }) {
+      const response = await this._client().request(`GET /repos/${repoFullname}/git/ref/${ref}`, {});
+      return response.data;
+    },
+    async getWorkflowRunJobs({
+      repoFullname, workflowRunId,
+    }) {
+      return this._client().paginate(`GET /repos/${repoFullname}/actions/runs/${workflowRunId}/jobs`, {
+        per_page: 100,
+      });
+    },
+    async rerunFailedJobs({
+      repoFullname, workflowRunId,
+    }) {
+      const response = await this._client().request(`POST /repos/${repoFullname}/actions/runs/${workflowRunId}/rerun-failed-jobs`, {});
       return response.data;
     },
   },

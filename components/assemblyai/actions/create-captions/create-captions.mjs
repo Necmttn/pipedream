@@ -2,10 +2,16 @@ import assemblyai from "../../assemblyai.app.mjs";
 
 export default {
   name: "Create Captions",
-  description: "Export your completed transcripts in SRT (srt) or VTT (vtt) format, which can be used for subtitles and closed captions in videos. [See the documentation](https://www.assemblyai.com/docs/API%20reference/transcript)",
+  description: "Export your completed transcripts in SRT (srt) or VTT (vtt) format, which can be used for subtitles and closed captions in videos. [See the documentation](https://www.assemblyai.com/docs/api-reference/transcripts/get-subtitles)",
   key: "assemblyai-create-captions",
-  version: "0.0.1",
+  version: "0.0.5",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     assemblyai,
     transcriptId: {

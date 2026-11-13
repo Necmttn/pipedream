@@ -3,9 +3,14 @@ import app from "../../pandadoc.app.mjs";
 export default {
   key: "pandadoc-list-contacts",
   name: "List Contacts",
-  description: "This method lists all contacts within an account. [See the docs here](https://developers.pandadoc.com/reference/list-contacts)",
+  description: "List all contacts within an account. [See the documentation here](https://developers.pandadoc.com/reference/list-contacts)",
   type: "action",
-  version: "0.0.6",
+  version: "0.0.9",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   props: {
     app,
   },

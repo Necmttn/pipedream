@@ -6,8 +6,13 @@ export default {
   ...common,
   key: "youtube_data_api-create-playlist",
   name: "Create Playlist",
-  description: "Creates a playlist. [See the docs](https://developers.google.com/youtube/v3/docs/playlists/insert) for more information",
-  version: "0.0.2",
+  description: "Creates a playlist. [See the documentation](https://developers.google.com/youtube/v3/docs/playlists/insert) for more information",
+  version: "0.0.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     youtubeDataApi,

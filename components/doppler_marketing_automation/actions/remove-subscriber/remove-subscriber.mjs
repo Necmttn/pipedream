@@ -1,10 +1,15 @@
 import app from "../../doppler_marketing_automation.app.mjs";
 
 export default {
-  name: "Remove Subscriber",
-  version: "0.0.1",
   key: "doppler_marketing_automation-remove-subscriber",
-  description: "Remove a subscriber. [See the documentation](https://restapi.fromdoppler.com/docs/resources#!/Subscribers/AccountsByAccountNameListsByListIdSubscribersByEmailDelete)",
+  name: "Remove Subscriber",
+  description: "Removes a subscriber from a list completely. [See the documentation](https://restapi.fromdoppler.com/docs/resources#!/Subscribers/AccountsByAccountNameListsByListIdSubscribersByEmailDelete)",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     app,
@@ -18,8 +23,8 @@ export default {
       propDefinition: [
         app,
         "subscriberEmail",
-        (c) => ({
-          listId: c.listId,
+        ({ listId }) => ({
+          listId,
         }),
       ],
     },
@@ -30,11 +35,7 @@ export default {
       email: this.email,
       listId: this.listId,
     });
-
-    if (response) {
-      $.export("$summary", `Successfully removed subscriber with email ${this.email}`);
-    }
-
+    $.export("$summary", `Successfully removed subscriber: ${this.email} from list: ${this.listId}`);
     return response;
   },
 };

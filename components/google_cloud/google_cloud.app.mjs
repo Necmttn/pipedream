@@ -2,13 +2,11 @@
 import { Logging } from "@google-cloud/logging";
 import { Storage } from "@google-cloud/storage";
 import { BigQuery } from "@google-cloud/bigquery";
-import {
-  ZonesClient,
-  ZoneOperationsClient,
-  InstancesClient,
-} from "@google-cloud/compute";
 import { v1 as bqdt } from "@google-cloud/bigquery-data-transfer";
-import { ConfigurationError } from "@pipedream/platform";
+import {
+  InstancesClient,
+  ZonesClient,
+} from "@google-cloud/compute";
 
 export default {
   type: "app",
@@ -109,7 +107,12 @@ export default {
   },
   methods: {
     authKeyJson() {
-      return JSON.parse(this.$auth.key_json);
+      const keyJson = JSON.parse(this.$auth.key_json);
+      // Keys pasted with escaped newlines ("\\n") fail OpenSSL decoding
+      if (keyJson.private_key) {
+        keyJson.private_key = keyJson.private_key.replace(/\\n/g, "\n");
+      }
+      return keyJson;
     },
     sdkParams() {
       const {
@@ -135,67 +138,40 @@ export default {
     storageClient() {
       return new Storage(this.sdkParams());
     },
-    instancesClient() {
-      return new InstancesClient(this.sdkParams());
-    },
-    zoneOperationsClient() {
-      return new ZoneOperationsClient(this.sdkParams());
-    },
-    zonesClient() {
+    _zonesClient() {
       return new ZonesClient(this.sdkParams());
     },
+    _instancesClient() {
+      return new InstancesClient(this.sdkParams());
+    },
+    async listZones() {
+      const [
+        zones,
+      ] = await this._zonesClient().list({
+        project: this.sdkParams().projectId,
+      });
+      return zones;
+    },
     async listVmInstancesByZone(zone) {
-      const instancesClient = this.instancesClient();
-      const sdkParams = this.sdkParams();
       const [
         instances,
-      ] = await instancesClient.list({
-        project: sdkParams.projectId,
+      ] = await this._instancesClient().list({
+        project: this.sdkParams().projectId,
         zone,
       });
       return instances;
     },
-    async listZones() {
-      const zonesClient = this.zonesClient();
-      const sdkParams = this.sdkParams();
-      const [
-        zones,
-      ] = await zonesClient.list({
-        project: sdkParams.projectId,
-      });
-      return zones;
-    },
-    async switchInstanceBootStatus(zone, instance, newStatus) {
-      if (![
-        "start",
-        "stop",
-      ].includes(newStatus)) {
-        throw new ConfigurationError("The new VM boot status must be 'start' or 'stop'.");
-      }
-      const instancesClient = this.instancesClient();
-      const sdkParams = this.sdkParams();
+    async switchInstanceBootStatus({
+      zone, instance, status,
+    }) {
       const [
         response,
-      ] = await instancesClient[newStatus]({
-        project: sdkParams.projectId,
+      ] = await this._instancesClient()[status]({
+        project: this.sdkParams().projectId,
         zone,
         instance,
       });
       return response.latestResponse;
-    },
-    async waitOperation(operation) {
-      const operationsClient = this.zoneOperationsClient();
-      const sdkParams = this.sdkParams();
-      while (operation.status !== "DONE") {
-        [
-          operation,
-        ] = await operationsClient.wait({
-          operation: operation.name,
-          project: sdkParams.projectId,
-          zone: operation.zone.split("/").pop(),
-        });
-      }
-      return operation;
     },
     getBigQueryClient() {
       const credentials = this.authKeyJson();

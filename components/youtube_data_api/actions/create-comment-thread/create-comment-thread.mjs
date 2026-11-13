@@ -5,9 +5,15 @@ export default {
   ...common,
   key: "youtube_data_api-create-comment-thread",
   name: "Create Comment Thread",
-  description: "Creates a new top-level comment in a video. [See the docs](https://developers.google.com/youtube/v3/docs/commentThreads/insert) for more information",
-  version: "0.0.1",
+  description: "Creates a new top-level comment in a video. [See the documentation](https://developers.google.com/youtube/v3/docs/commentThreads/insert) for more information",
+  version: "0.0.5",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     youtubeDataApi,
     channelId: {
@@ -21,7 +27,7 @@ export default {
         youtubeDataApi,
         "userOwnedVideo",
       ],
-      description: "Select the video to add comment to. Leave blank to post comment to channel.",
+      description: "Select the video to add comment to. E.g. `wslno0wDSFQ`. Leave blank to post comment to channel.",
     },
     text: {
       type: "string",

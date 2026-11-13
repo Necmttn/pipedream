@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/twist",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "description": "Pipedream Twist Components",
   "main": "twist.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.1.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

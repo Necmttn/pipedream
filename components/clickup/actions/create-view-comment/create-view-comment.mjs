@@ -1,62 +1,18 @@
-import clickup from "../../clickup.app.mjs";
+import common from "../common/list-props.mjs";
 
 export default {
   key: "clickup-create-view-comment",
   name: "Create View Comment",
-  description: "Creates a view comment. See the docs [here](https://clickup.com/api) in **Comments / Create Chat View Comment** section.",
-  version: "0.0.7",
+  description: "Creates a view comment. [See the documentation](https://clickup.com/api) in **Comments / Create Chat View Comment** section.",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
-    clickup,
-    workspaceId: {
-      propDefinition: [
-        clickup,
-        "workspaces",
-      ],
-    },
-    spaceId: {
-      propDefinition: [
-        clickup,
-        "spaces",
-        (c) => ({
-          workspaceId: c.workspaceId,
-        }),
-      ],
-      optional: true,
-    },
-    folderId: {
-      propDefinition: [
-        clickup,
-        "folders",
-        (c) => ({
-          spaceId: c.spaceId,
-        }),
-      ],
-      optional: true,
-    },
-    listId: {
-      propDefinition: [
-        clickup,
-        "lists",
-        (c) => ({
-          spaceId: c.spaceId,
-          folderId: c.folderId,
-        }),
-      ],
-      optional: true,
-    },
-    viewId: {
-      propDefinition: [
-        clickup,
-        "views",
-        (c) => ({
-          workspaceId: c.workspaceId,
-          spaceId: c.spaceId,
-          listId: c.listId,
-          folderId: c.folderId,
-        }),
-      ],
-    },
+    ...common.props,
     commentText: {
       label: "Comment Text",
       description: "The text of the comment",
@@ -71,7 +27,7 @@ export default {
     },
     assignees: {
       propDefinition: [
-        clickup,
+        common.props.clickup,
         "assignees",
         (c) => ({
           workspaceId: c.workspaceId,
@@ -79,7 +35,39 @@ export default {
       ],
       optional: true,
     },
-
+    folderId: {
+      propDefinition: [
+        common.props.clickup,
+        "folderId",
+        (c) => ({
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    listId: {
+      propDefinition: [
+        common.props.clickup,
+        "listId",
+        (c) => ({
+          folderId: c.folderId,
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    viewId: {
+      propDefinition: [
+        common.props.clickup,
+        "viewId",
+        (c) => ({
+          workspaceId: c.workspaceId,
+          spaceId: c.spaceId,
+          folderId: c.folderId,
+          listId: c.listId,
+        }),
+      ],
+    },
   },
   async run({ $ }) {
     const {

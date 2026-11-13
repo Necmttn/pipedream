@@ -5,7 +5,12 @@ export default {
   key: "discord-send-message",
   name: "Send Message",
   description: "Send a simple message to a Discord channel",
-  version: "1.0.1",
+  version: "1.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   async run({ $ }) {
     const {
@@ -14,12 +19,13 @@ export default {
       threadID,
       username,
       includeSentViaPipedream,
+      suppressNotifications,
     } = this;
-
     try {
       const resp = await this.discord.sendMessage(this.channel, {
         avatar_url: avatarURL,
         username,
+        flags: this.getMessageFlags(suppressNotifications),
         content: includeSentViaPipedream
           ? this.appendPipedreamText(message)
           : message,

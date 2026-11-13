@@ -3,21 +3,26 @@ import common from "../common/common.mjs";
 export default {
   key: "airtable_oauth-update-table",
   name: "Update Table",
-  description: "Updates an existing table. [See the documentation](https://airtable.com/developers/web/api/update-table)",
-  version: "0.0.5",
+  description: "Update an existing table. [See the documentation](https://airtable.com/developers/web/api/update-table)",
+  version: "0.0.15",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,
     name: {
       type: "string",
       label: "Name",
-      description: "The name for the table",
+      description: "The updated name of the table",
       optional: true,
     },
     description: {
       type: "string",
       label: "Description",
-      description: "The description for the table",
+      description: "The updated description of the table",
       optional: true,
     },
   },
@@ -30,8 +35,8 @@ export default {
       data.description = this.description;
     }
     const response = await this.airtable.updateTable({
-      baseId: this.baseId.value,
-      tableId: this.tableId.value,
+      baseId: this.baseId,
+      tableId: this.tableId,
       data,
       $,
     });

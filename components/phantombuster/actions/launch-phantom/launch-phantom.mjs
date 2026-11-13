@@ -2,8 +2,14 @@ import app from "../../phantombuster.app.mjs";
 
 export default {
   type: "action",
+  ai: "optimized",
   key: "phantombuster-launch-phantom",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   name: "Launch Phantom",
   description: "Adds an agent to the launch queue, [See the docs](https://hub.phantombuster.com/reference/post_agents-launch-1)",
   props: {

@@ -4,7 +4,12 @@ export default {
   key: "google_slides-refresh-chart",
   name: "Refresh a chart",
   description: "Refresh a chart from Sheets. [See the docs here](https://developers.google.com/slides/api/samples/elements#refresh_a_chart_from_sheets)",
-  version: "0.0.2",
+  version: "0.0.11",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     app,

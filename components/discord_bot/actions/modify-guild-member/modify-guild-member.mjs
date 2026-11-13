@@ -19,7 +19,13 @@ export default {
   name: "Modify Guild Member",
   description: "Update attributes of a guild member. [See the docs here](https://discord.com/developers/docs/resources/guild#modify-guild-member)",
   type: "action",
-  version: "0.0.9",
+  ai: "optimized",
+  version: "1.0.2",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     ...common.props,
     userId: {

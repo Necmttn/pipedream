@@ -1,59 +1,91 @@
-import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
-import app from "../../zoho_workdrive.app.mjs";
+import { ConfigurationError } from "@pipedream/platform";
+import common from "../common/base.mjs";
+import { Readable } from "stream";
+import { fileTypeFromBuffer } from "file-type";
+import { findMaxFolderId } from "../../common/additionalFolderProps.mjs";
 import sampleEmit from "./test-event.mjs";
 
 export default {
+  ...common,
   key: "zoho_workdrive-new-file-in-folder",
   name: "New File In Folder",
-  version: "0.0.2",
+  version: "0.2.2",
   description: "Emit new event when a new file is created in a specific folder.",
   type: "source",
   dedupe: "unique",
   props: {
-    app,
-    db: "$.service.db",
-    timer: {
-      label: "Polling interval",
-      description: "Pipedream will poll the Zoho WorkDrive on this schedule",
-      type: "$.interface.timer",
-      default: {
-        intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
-      },
-    },
-    teamId: {
+    ...common.props,
+    folderType: {
       propDefinition: [
-        app,
-        "teamId",
+        common.props.app,
+        "folderType",
       ],
     },
     folderId: {
       propDefinition: [
-        app,
+        common.props.app,
         "parentId",
-        ({ teamId }) => ({
+        ({
+          teamId, folderType,
+        }) => ({
           teamId,
+          folderType,
         }),
       ],
-      label: "Folder Id",
-      description: "The unique ID of the folder.",
+      label: "Folder ID",
+      description: "Select the unique ID of the folder. Select a folder to view its subfolders.",
+      reloadProps: true,
+    },
+    includeLink: {
+      label: "Include Link",
+      type: "boolean",
+      description: "Upload attachment to your File Stash and emit temporary download link to the file. See [the docs](https://pipedream.com/docs/connect/components/files) to learn more about working with files in Pipedream.",
+      default: false,
+      optional: true,
+    },
+    dir: {
+      type: "dir",
+      accessMode: "write",
+      optional: true,
     },
   },
   methods: {
-    _getLastDate() {
-      return this.db.get("lastDate") || 0;
-    },
-    _setLastDate(lastDate) {
-      this.db.set("lastDate", lastDate);
+    ...common.methods,
+    async stashFile(item) {
+      const fileContent = await this.app.downloadFile({
+        fileId: item.id,
+      });
+      const buffer = Buffer.from(fileContent, "base64");
+      const filepath = `${item.id}/${item.attributes.name}`;
+      const type = await fileTypeFromBuffer(buffer);
+      const file = await this.dir.open(filepath).fromReadableStream(
+        Readable.from(buffer),
+        type?.mime,
+        buffer.length,
+      );
+      // Return file details and temporary download link:
+      // { path, get_url, s3Key, type }
+      return await file.withoutPutUrl().withGetUrl();
     },
     async startEvent(maxResults = 0) {
-      const {
-        app,
-        folderId,
-      } = this;
+      let folderId;
+      if (this.manuallyEnterFolderId) {
+        folderId = this.typedFolderId;
+      } else {
+        const num = findMaxFolderId(this);
+        folderId = num > 0
+          ? this[`folderId${num}`]
+          : this.folderId;
+      }
 
-      const lastDate = this._getLastDate();
-      const items = app.paginate({
-        fn: app.listFiles,
+      if (!folderId) {
+        throw new ConfigurationError("Please select a Folder ID or type in a Folder ID.");
+      }
+
+      const lastDate = this._getValidatedLastDate();
+      let maxDate = lastDate;
+      const items = this.app.paginate({
+        fn: this.app.listFiles,
         maxResults,
         filter: "allfiles",
         sort: "created_time",
@@ -63,18 +95,26 @@ export default {
       let responseArray = [];
 
       for await (const item of items) {
-        if (new Date(item.created_time) <= new Date(lastDate)) break;
-        responseArray.push(item);
+        const createdTime = item.attributes.created_time_in_millisecond;
+        if (createdTime > lastDate) {
+          responseArray.push(item);
+          if (createdTime > maxDate) {
+            maxDate = createdTime;
+          }
+        }
       }
-      if (responseArray.length) this._setLastDate(responseArray[0].created_time);
+      this._setLastDate(maxDate);
 
       for (const item of responseArray) {
+        if (this.includeLink) {
+          item.file = await this.stashFile(item);
+        }
         this.$emit(
           item,
           {
             id: item.id,
-            summary: `A new file with id: "${item.id}" was created!`,
-            ts: item.created_time,
+            summary: `A new file with ID: "${item.id}" was created!`,
+            ts: item.attributes.created_time_in_millisecond,
           },
         );
       }
@@ -82,11 +122,8 @@ export default {
   },
   hooks: {
     async deploy() {
-      await this.startEvent(25);
+      await this.startEvent(10);
     },
-  },
-  async run() {
-    await this.startEvent();
   },
   sampleEmit,
 };

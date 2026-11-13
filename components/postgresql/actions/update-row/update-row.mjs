@@ -1,26 +1,23 @@
 import postgresql from "../../postgresql.app.mjs";
+import { parseRowValues } from "../../common/utils.mjs";
 
 export default {
   name: "Update Row",
   key: "postgresql-update-row",
-  description: "Updates an existing row. [See Docs](https://node-postgres.com/features/queries)",
-  version: "0.0.10",
+  description: "Updates an existing row. [See the documentation](https://node-postgres.com/features/queries)",
+  version: "2.0.9",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     postgresql,
-    rejectUnauthorized: {
-      propDefinition: [
-        postgresql,
-        "rejectUnauthorized",
-      ],
-    },
     schema: {
       propDefinition: [
         postgresql,
         "schema",
-        (c) => ({
-          rejectUnauthorized: c.rejectUnauthorized,
-        }),
       ],
     },
     table: {
@@ -29,7 +26,6 @@ export default {
         "table",
         (c) => ({
           schema: c.schema,
-          rejectUnauthorized: c.rejectUnauthorized,
         }),
       ],
     },
@@ -40,7 +36,6 @@ export default {
         (c) => ({
           table: c.table,
           schema: c.schema,
-          rejectUnauthorized: c.rejectUnauthorized,
         }),
       ],
       label: "Lookup Column",
@@ -54,7 +49,6 @@ export default {
           table: c.table,
           column: c.column,
           schema: c.schema,
-          rejectUnauthorized: c.rejectUnauthorized,
         }),
       ],
     },
@@ -63,6 +57,7 @@ export default {
         postgresql,
         "rowValues",
       ],
+      description: "JSON representation of your new table row values. For example: `{ \"product_name\": \"Laptop Pro 15\", \"price\": 1200.50, \"stock_quantity\": 50 }`",
     },
   },
   async run({ $ }) {
@@ -72,27 +67,23 @@ export default {
       column,
       value,
       rowValues,
-      rejectUnauthorized,
     } = this;
-    try {
-      const res = await this.postgresql.updateRow(
-        schema,
-        table,
-        column,
-        value,
-        rowValues,
-        rejectUnauthorized,
-      );
-      const summary = res
-        ? "Row updated"
-        : "Row not found";
-      $.export("$summary", summary);
-      return res;
-    } catch (error) {
-      throw new Error(`
-      Row not updated due to an error. ${error}.
-      This could be because SSL verification failed, consider changing the Reject Unauthorized prop and try again.
-    `);
-    }
+
+    const parsedRowValues = parseRowValues(rowValues);
+    const errorMsg = "Row not updated due to an error. ";
+
+    const res = await this.postgresql.updateRow(
+      schema,
+      table,
+      column,
+      value,
+      parsedRowValues,
+      errorMsg,
+    );
+    const summary = res
+      ? "Row updated"
+      : "Row not found";
+    $.export("$summary", summary);
+    return res;
   },
 };

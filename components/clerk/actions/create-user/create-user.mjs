@@ -6,7 +6,12 @@ import {
 export default {
   key: "clerk-create-user",
   name: "Create User",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   description: "Creates a new user. Your user management settings determine how you should setup your user model. [See the documentation](https://clerk.com/docs/reference/backend-api/tag/Users#operation/CreateUser)",
   type: "action",
   props: {
@@ -71,7 +76,7 @@ export default {
     passwordHasher: {
       type: "string",
       label: "Password Hasher",
-      description: "The hashing algorithm that was used to generate the password digest. The algorithms that Clerk supports at the moment are `bcrypt`, `bcrypt_sha256_django`, `md5`, `pbkdf2_sha256`, `pbkdf2_sha256_django`, `phpass`, `scrypt_firebase` and 2 `argon2` variants, `argon2i` and `argon2id`. Each of the above expects the incoming digest to be of a particular format. [See the documentarion](https://clerk.com/docs/reference/backend-api/tag/Users#operation/CreateUser!path=password_hasher&t=request) for further information.",
+      description: "The hashing algorithm that was used to generate the password digest. The algorithms that Clerk supports at the moment are `bcrypt`, `bcrypt_sha256_django`, `md5`, `pbkdf2_sha256`, `pbkdf2_sha256_django`, `phpass`, `scrypt_firebase` and 2 `argon2` variants, `argon2i` and `argon2id`. Each of the above expects the incoming digest to be of a particular format. [See the documentation](https://clerk.com/docs/reference/backend-api/tag/Users#operation/CreateUser!path=password_hasher&t=request) for further information.",
       optional: true,
     },
     skipPasswordChecks: {

@@ -2,10 +2,16 @@ import app from "../../zenrows.app.mjs";
 
 export default {
   name: "Scrape URL CSS Selectors",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "zenrows-scrape-url-css-selectors",
   description: "Scrape HTML of the URL with CSS Selectors. [See the documentation](https://www.zenrows.com/docs#css-selectors-curl)",
   type: "action",
+  ai: "optimized",
   props: {
     app,
     url: {

@@ -4,10 +4,10 @@ import constants from "../../common/constants.mjs";
 export default {
   ...common,
   key: "linear_app-issue-created-instant",
-  name: "New Created Issue (Instant)",
-  description: "Emit new event when a new issue is created. See the docs [here](https://developers.linear.app/docs/graphql/webhooks)",
+  name: "New Issue Created (Instant)",
+  description: "Emit new event when a new issue is created in Linear. Provides complete issue details including title, description, team, assignee, state, and timestamps. Supports filtering by team and project. See Linear docs for additional info [See the documentation](https://linear.app/developers/webhooks).",
   type: "source",
-  version: "0.3.5",
+  version: "0.3.27",
   dedupe: "unique",
   methods: {
     ...common.methods,
@@ -41,6 +41,11 @@ export default {
     },
     isRelevant(body) {
       return body?.action === "create";
+    },
+    getResource(issue) {
+      return this.linearApp.getIssue({
+        issueId: issue.id,
+      });
     },
     getMetadata(resource) {
       const {

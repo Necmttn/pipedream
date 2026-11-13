@@ -3,9 +3,14 @@ import app from "../../pandadoc.app.mjs";
 export default {
   key: "pandadoc-create-folder",
   name: "Create Folder",
-  description: "Create a new folder to store your documents. [See the docs here](https://developers.pandadoc.com/reference/create-documents-folder)",
+  description: "Create a new folder to store your documents. [See the documentation here](https://developers.pandadoc.com/reference/create-documents-folder)",
   type: "action",
-  version: "0.0.5",
+  version: "0.0.8",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     app,
     name: {

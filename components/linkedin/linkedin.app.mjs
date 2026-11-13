@@ -1,5 +1,7 @@
-import { axios } from "@pipedream/platform";
+import { axios as axiosPD } from "@pipedream/platform";
+import axios from "axios";
 import constants from "./common/constants.mjs";
+import utils from "./common/utils.mjs";
 
 export default {
   type: "app",
@@ -14,20 +16,63 @@ export default {
       type: "string",
       label: "Organization Id",
       description: "ID of the organization that will author the post",
-      async options({ page }) {
-        const { elements } = await this.getOrganizations(page);
+      async options({
+        page,
+        prevContext,
+      }) {
+        // Track the next organization page across calls so a page whose
+        // options are all filtered out (e.g. all 403) doesn't stop pagination.
+        let currentPage = prevContext?.nextPage ?? page ?? 0;
 
         const responseArray = [];
-        for (const item of elements) {
-          const orgId = item.organization.split(":")[3];
-          const orgData = await this.getOrganization(orgId);
+        while (true) {
+          const { elements } = await this.getOrganizations(currentPage);
 
-          responseArray.push({
-            label: orgData.localizedName,
-            value: orgId,
-          });
+          // The API reports no more pages, stop paginating.
+          if (!elements?.length) {
+            return {
+              options: responseArray,
+              context: {
+                nextPage: currentPage,
+              },
+            };
+          }
+
+          for (const item of elements) {
+            const orgId = item.organization?.split(":")[3];
+            if (!orgId) {
+              continue;
+            }
+
+            try {
+              const orgData = await this.getOrganization(orgId);
+              if (orgData?.localizedName) {
+                responseArray.push({
+                  label: orgData.localizedName,
+                  value: orgId,
+                });
+              }
+            } catch (error) {
+              if (error.response?.status !== 403) {
+                throw error;
+              }
+              console.log(`Skipping organization ${orgId}: ${error.message}`);
+            }
+          }
+
+          currentPage += 1;
+
+          // Only surface a page once it yields at least one accessible option;
+          // otherwise keep requesting subsequent pages.
+          if (responseArray.length) {
+            return {
+              options: responseArray,
+              context: {
+                nextPage: currentPage,
+              },
+            };
+          }
         }
-        return responseArray;
       },
     },
     adAccountId: {
@@ -45,7 +90,7 @@ export default {
         });
         return elements?.map((element) => ({
           label: element.name,
-          id: element.id,
+          value: element.id,
         }));
       },
     },
@@ -53,18 +98,21 @@ export default {
       type: "string",
       label: "Campaign Id",
       description: "Sponsored campaign account id to match results by",
-      async options({ page }) {
+      async options({
+        page, adAccountId,
+      }) {
         const count = 10;
         const params = {
           count,
           start: count * page,
         };
         const { elements } = await this.searchCampaigns({
+          adAccountId,
           params,
         });
         return elements?.map((element) => ({
           label: element.name,
-          id: element.id,
+          value: element.id,
         }));
       },
     },
@@ -83,7 +131,7 @@ export default {
     postId: {
       type: "string",
       label: "Post Id",
-      description: "URN of the post that will be deleted",
+      description: "URN of the post that will be deleted. URN must be either a ugcPostUrn (`urn:li:ugcPost:{id}`) or shareUrn (`urn:li:share:{id}`). The shareUrn can be found in the post's embed code.",
     },
     startYear: {
       type: "string",
@@ -129,8 +177,8 @@ export default {
       return {
         "Authorization": `Bearer ${this.$auth.oauth_access_token}`,
         "Content-Type": "application/json",
-        "X-Restli-Protocol-Version": "2.0.0",
         "Linkedin-Version": constants.VERSION_HEADER,
+        "X-Restli-Protocol-Version": constants.RESTLI_PROTOCOL_VERSION,
       };
     },
     async _makeRequest({
@@ -138,38 +186,35 @@ export default {
     }) {
       const BASE_URL = constants.BASE_URL;
 
-      const config = {
+      return axiosPD($ || this, {
         url: url || `${BASE_URL}${constants.VERSION_PATH}${path}`,
         headers: this._getHeaders(),
         ...otherConfig,
-      };
-
-      return axios($ || this, config);
+      });
     },
-    async createPost({
-      data, ...args
+    async _makeRequestAxios({
+      url, path, ...otherConfig
     }) {
-      data = {
-        ...data,
-        author: `urn:li:${data?.author
-          ? "organization"
-          : "person"}:${data.author || this.$auth.oauth_uid}`,
-        lifecycleState: "PUBLISHED",
-        distribution: {
-          feedDistribution: "MAIN_FEED",
-        },
-      };
+      delete otherConfig.$;
+      const BASE_URL = constants.BASE_URL;
+
+      return axios({
+        url: url || `${BASE_URL}${constants.VERSION_PATH}${path}`,
+        headers: this._getHeaders(),
+        ...otherConfig,
+      });
+    },
+    createPost(args = {}) {
       return this._makeRequest({
         method: "POST",
         path: "/posts",
-        data,
         ...args,
       });
     },
     async getOrganizations(page) {
       return this._makeRequest({
         method: "GET",
-        path: `/organizationAcls?q=roleAssignee&count=5&start=${page * 5}`,
+        path: `/organizationAcls?q=roleAssignee&state=APPROVED&count=5&start=${page * 5}`,
       });
     },
     async getOrganization(organizationId) {
@@ -223,9 +268,13 @@ export default {
         ...args,
       });
     },
-    async getAccessControl(args = {}) {
-      return this._makeRequest({
-        path: "/organizationAcls",
+    async getAccessControl({
+      strParams, ...args
+    }) {
+      return this._makeRequestAxios({
+        path: `/organizationAcls${strParams
+          ? `?${strParams}`
+          : ""}`,
         ...args,
       });
     },
@@ -253,11 +302,73 @@ export default {
         ...args,
       });
     },
-    async searchCampaigns(args = {}) {
+    async searchCampaigns({
+      adAccountId, ...args
+    } = {}) {
       return this._makeRequest({
-        path: "/adCampaigns?q=search",
+        path: `/adAccounts/${adAccountId}/adCampaigns?q=search`,
         ...args,
       });
+    },
+    listPosts(args = {}) {
+      return this._makeRequest({
+        path: "/posts",
+        paramsSerializer: utils.getParamsSerializer(utils.encodeFn),
+        ...args,
+      });
+    },
+    async *getIterations({
+      resourcesFn, resourcesFnArgs, resourceName,
+      lastDateAt, dateField,
+      max = constants.DEFAULT_MAX,
+    }) {
+      let page = 0;
+      let resourcesCount = 0;
+
+      while (true) {
+        const response =
+          await resourcesFn({
+            ...resourcesFnArgs,
+            params: {
+              ...resourcesFnArgs?.params,
+              count: constants.DEFAULT_LIMIT,
+              start: page * constants.DEFAULT_LIMIT,
+            },
+          });
+
+        const nextResources = utils.getNestedProperty(response, resourceName);
+
+        if (!nextResources?.length) {
+          console.log("No more resources found");
+          return;
+        }
+
+        for (const resource of nextResources) {
+          const isDateGreater =
+            lastDateAt
+              && resource[dateField] > lastDateAt;
+
+          if (!lastDateAt || isDateGreater) {
+            yield resource;
+            resourcesCount += 1;
+          }
+
+          if (resourcesCount >= max) {
+            console.log("Reached max resources");
+            return;
+          }
+        }
+
+        if (nextResources.length < constants.DEFAULT_LIMIT) {
+          console.log("No next page found");
+          return;
+        }
+
+        page += 1;
+      }
+    },
+    paginate(args = {}) {
+      return utils.iterate(this.getIterations(args));
     },
   },
 };

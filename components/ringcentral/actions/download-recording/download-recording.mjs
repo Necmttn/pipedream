@@ -5,7 +5,12 @@ export default {
   key: "ringcentral-download-recording",
   name: "Download Recording",
   description: "Gets a recording and downloads it to the /tmp directory. [See the documentation](https://developers.ringcentral.com/api-reference/Call-Recordings/readCallRecordingContent)",
-  version: "0.0.2",
+  version: "0.0.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     ringcentral,
@@ -45,6 +50,11 @@ export default {
       type: "string",
       label: "Filename",
       description: "Filename for the new file in the /tmp directory",
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   methods: {

@@ -1,21 +1,22 @@
+import { DEFAULT_LIMIT } from "../../common/constants.mjs";
 import common from "../common/common.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "hubspot-new-email-subscriptions-timeline",
   name: "New Email Subscriptions Timeline",
-  description: "Emit new event when new email timeline subscription added for the portal.",
-  version: "0.0.12",
+  description: "Emit new event when a new email timeline subscription is added for the portal.",
+  version: "0.0.48",
   dedupe: "unique",
   type: "source",
-  hooks: {},
   methods: {
     ...common.methods,
     getTs(timeline) {
       return timeline.timestamp;
     },
     generateMeta(timeline) {
-      const { normalizedEmailId: id } = timeline;
+      const { recipient: id } = timeline;
       const ts = this.getTs(timeline);
       return {
         id: `${id}${ts}`,
@@ -26,10 +27,12 @@ export default {
     isRelevant(timeline, createdAfter) {
       return this.getTs(timeline) > createdAfter;
     },
-    getParams() {
-      const startTimestamp = new Date();
+    getParams(after) {
       return {
-        startTimestamp,
+        params: {
+          limit: DEFAULT_LIMIT,
+          startTimestamp: after,
+        },
       };
     },
     async processResults(after, params) {
@@ -41,4 +44,5 @@ export default {
       );
     },
   },
+  sampleEmit,
 };

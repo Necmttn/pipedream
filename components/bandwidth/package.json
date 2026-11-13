@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/bandwidth",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Pipedream Bandwidth Components",
-  "main": "index.js",
+  "main": "bandwidth.app.js",
   "keywords": [
     "pipedream",
     "bandwidth"

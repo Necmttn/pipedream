@@ -1,89 +1,192 @@
 import googleSheets from "../../google_sheets.app.mjs";
+import {
+  getHeaders, rowObjectToArray,
+} from "../../common/ai-utils.mjs";
+
+function indexToColumnLetter(index) {
+  let letter = "";
+  let i = index;
+  while (i >= 0) {
+    letter = String.fromCharCode((i % 26) + 65) + letter;
+    i = Math.floor(i / 26) - 1;
+  }
+  return letter;
+}
 
 export default {
   key: "google_sheets-update-rows",
   name: "Update Rows",
-  description: "Update multiple rows in a spreadsheet defined by a range",
-  version: "0.1.2",
+  description:
+    "Update specific rows in a Google Sheets worksheet."
+    + " Pass an array of updates, each with a `row` number and"
+    + " `values`."
+    + " Example: `[{\"row\": 3, \"values\": {\"Status\":"
+    + " \"Complete\", \"Score\": 95}}]`."
+    + " Use **Find Rows** or **Read Rows** to discover row"
+    + " numbers first."
+    + " Use **Get Spreadsheet Info** to discover column header"
+    + " names."
+    + " Only specified columns are updated when using object"
+    + " values — unspecified columns are left unchanged.",
+  version: "1.0.0",
   type: "action",
+  ai: "optimized",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     googleSheets,
-    drive: {
-      propDefinition: [
-        googleSheets,
-        "watchedDrive",
-      ],
+    spreadsheetId: {
+      type: "string",
+      label: "Spreadsheet ID",
       description:
-        "The drive containing the worksheet to update. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
-    },
-    sheetId: {
-      propDefinition: [
-        googleSheets,
-        "sheetID",
-        (c) => ({
-          driveId: googleSheets.methods.getDriveId(c.drive),
-        }),
-      ],
-      description: "The spreadsheet containing the worksheet to update",
+        "The spreadsheet ID from the Google Sheets URL.",
     },
     sheetName: {
-      propDefinition: [
-        googleSheets,
-        "sheetName",
-        (c) => ({
-          sheetId: c.sheetId,
-        }),
-      ],
+      type: "string",
+      label: "Worksheet Name",
+      description:
+        "The worksheet (tab) name. Use **Get Spreadsheet Info**"
+        + " to discover worksheet names.",
     },
-    range: {
-      propDefinition: [
-        googleSheets,
-        "range",
-      ],
+    updates: {
+      type: "string",
+      label: "Updates",
+      description:
+        "JSON array of update objects. Each object has `row`"
+        + " (1-indexed row number) and `values` (object with"
+        + " header keys or array of positional values)."
+        + " Example: `[{\"row\": 3, \"values\": {\"Status\":"
+        + " \"Complete\"}}]`.",
     },
-    rows: {
-      propDefinition: [
-        googleSheets,
-        "rows",
-      ],
+    hasHeaders: {
+      type: "boolean",
+      label: "Has Headers",
+      description:
+        "Whether row 1 contains column headers. Default: `true`.",
+      optional: true,
+      default: true,
     },
   },
-  async run() {
-    let rows = this.rows;
-
-    let inputValidated = true;
-
-    if (!Array.isArray(rows)) {
-      rows = JSON.parse(this.rows);
-    }
-
-    if (!rows || !rows.length || !Array.isArray(rows)) {
-      inputValidated = false;
-    } else {
-      rows.forEach((row) => {
-        if (!Array.isArray(row)) {
-          inputValidated = false;
-        }
-      });
-    }
-
-    // Throw an error if input validation failed
-    if (!inputValidated) {
-      console.error("Data Submitted:");
-      console.error(rows);
+  async run({ $ }) {
+    let parsedUpdates;
+    try {
+      parsedUpdates = typeof this.updates === "string"
+        ? JSON.parse(this.updates)
+        : this.updates;
+    } catch {
       throw new Error(
-        "Rows data is not an array of arrays. Please enter an array of arrays in the `Rows` parameter above. If you're trying to send a single rows to Google Sheets, search for the action to add a single row to Sheets or try modifying the code for this step.",
+        "updates must be valid JSON. Example:"
+        + " [{\"row\": 3, \"values\": {\"Status\": \"Done\"}}]",
       );
     }
 
-    const request = {
-      spreadsheetId: this.sheetId,
-      range: `${this.sheetName}!${this.range}`,
-      valueInputOption: "USER_ENTERED",
-      resource: {
-        values: rows,
-      },
+    if (!Array.isArray(parsedUpdates)) {
+      parsedUpdates = [
+        parsedUpdates,
+      ];
+    }
+
+    let headers = [];
+    const needsHeaders = parsedUpdates.some(
+      (u) => u.values && !Array.isArray(u.values)
+        && typeof u.values === "object",
+    );
+
+    if (needsHeaders && this.hasHeaders !== false) {
+      headers = await getHeaders(
+        this.googleSheets,
+        this.spreadsheetId,
+        this.sheetName,
+      );
+    }
+
+    for (const update of parsedUpdates) {
+      if (!update.row || !Number.isInteger(update.row)
+        || update.row < 1) {
+        throw new Error(
+          "Each update must have a `row` integer >= 1.",
+        );
+      }
+
+      const { values } = update;
+      const rowNum = update.row;
+
+      if (!values || (typeof values !== "object"
+        && !Array.isArray(values))) {
+        throw new Error(
+          `Update for row ${rowNum}: values must be an object`
+          + " or array.",
+        );
+      }
+
+      if (Array.isArray(values)) {
+        // Positional update — overwrite the entire row
+        await this.googleSheets.updateRow(
+          this.spreadsheetId,
+          this.sheetName,
+          rowNum,
+          values.map((v) => (v !== undefined && v !== null
+            ? String(v)
+            : "")),
+        );
+      } else if (typeof values === "object" && values !== null) {
+        if (!headers.length) {
+          throw new Error(
+            "Headers required to map object keys to columns."
+            + " Ensure row 1 has headers.",
+          );
+        }
+        // Find which columns were specified
+        const specifiedCount = headers.filter(
+          (h) => values[h] !== undefined,
+        ).length;
+
+        if (specifiedCount === headers.length) {
+          // Full row update — overwrite entire row
+          const fullRow = rowObjectToArray(headers, values);
+          await this.googleSheets.updateRow(
+            this.spreadsheetId,
+            this.sheetName,
+            rowNum,
+            fullRow,
+          );
+        } else {
+          // Partial update — only specified columns
+          // updateRowCells expects column letters as keys
+          const cellUpdates = {};
+          headers.forEach((header, i) => {
+            if (values[header] !== undefined) {
+              const colLetter = indexToColumnLetter(i);
+              cellUpdates[colLetter] = values[header] != null
+                ? String(values[header])
+                : "";
+            }
+          });
+          if (Object.keys(cellUpdates).length) {
+            await this.googleSheets.updateRowCells(
+              this.spreadsheetId,
+              this.sheetName,
+              rowNum,
+              cellUpdates,
+            );
+          }
+        }
+      }
+    }
+
+    $.export(
+      "$summary",
+      `Updated ${parsedUpdates.length} row${
+        parsedUpdates.length === 1
+          ? ""
+          : "s"} in "${this.sheetName}"`,
+    );
+
+    return {
+      rowsUpdated: parsedUpdates.length,
     };
-    return await this.googleSheets.updateSpreadsheet(request);
   },
 };

@@ -1,16 +1,16 @@
 import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
 import maxBy from "lodash.maxby";
 import constants from "../../common/constants.mjs";
-import common from "../common.mjs";
+import common from "../common/common.mjs";
 import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "discord_bot-new-forum-thread-message",
   name: "New Forum Thread Message",
-  description: "Emit new event for each forum thread message posted. Note that your bot must have the `MESSAGE_CONTENT` privilege intent to see the message content, [see the docs here](https://discord.com/developers/docs/topics/gateway#message-content-intent).",
+  description: "Emit new event for each forum thread message posted. Note that your bot must have the `MESSAGE_CONTENT` privilege intent to see the message content. [See the documentation](https://discord.com/developers/docs/topics/gateway#message-content-intent).",
   type: "source",
-  version: "0.0.2",
+  version: "1.0.0",
   dedupe: "unique", // Dedupe events based on the Discord message ID
   props: {
     ...common.props,
@@ -35,10 +35,35 @@ export default {
       label: "Forum Id",
       description: "Select the forum you want to watch.",
     },
+    ignoreBotMessages: {
+      type: "boolean",
+      label: "Ignore Bot Messages",
+      description: "Set to `true` to only emit messages NOT from the configured Discord bot",
+      optional: true,
+    },
+  },
+  hooks: {
+    async deploy() {
+      if (this.ignoreBotMessages) {
+        const { id } = await this.getBotProfile();
+        this._setBotId(id);
+      }
+    },
+  },
+  methods: {
+    ...common.methods,
+    getChannel(id) {
+      return this.discord._makeRequest({
+        path: `/channels/${id}`,
+      });
+    },
   },
   async run({ $ }) {
     // We store a cursor to the last message ID
     let lastMessageIDs = this._getLastMessageIDs();
+    const botId = this.ignoreBotMessages
+      ? this._getBotId()
+      : null;
 
     const { threads } = await this.discord.listThreads({
       $,
@@ -105,7 +130,26 @@ export default {
         continue;
       }
 
+      if (botId) {
+        messages = messages.filter((message) => message.author.id !== botId);
+      }
+
       console.log(`${messages.length} new messages in thread ${channelId}`);
+
+      messages = await Promise.all(messages.map(async (message) => ({
+        ...message,
+        thread: await this.getChannel(message.channel_id),
+      })));
+
+      const { available_tags: availableTags = [] } = await this.getChannel(this.forumId);
+      for (const message of messages) {
+        if (!message.thread.applied_tags) {
+          message.thread.applied_tags = [];
+        }
+        message.thread.applied_tags = message.thread.applied_tags.map((tagId) => ({
+          ...availableTags.find(({ id }) => id === tagId),
+        }));
+      }
 
       messages.reverse().forEach((message) => {
         this.$emit(message, {

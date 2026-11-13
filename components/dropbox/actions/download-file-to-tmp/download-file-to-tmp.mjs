@@ -1,52 +1,79 @@
-import dropbox from "../../dropbox.app.mjs";
 import fs from "fs";
-import { file } from "tmp-promise";
+import got from "got";
+import stream from "stream";
+import { promisify } from "util";
+import { checkTmp } from "../../common/utils.mjs";
+import dropbox from "../../dropbox.app.mjs";
 
 export default {
   name: "Download File to TMP",
   description: "Download a specific file to the temporary directory. [See the documentation](https://dropbox.github.io/dropbox-sdk-js/Dropbox.html#filesDownload__anchor).",
   key: "dropbox-download-file-to-tmp",
-  version: "0.0.4",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     dropbox,
     path: {
       propDefinition: [
         dropbox,
-        "pathFile",
+        "path",
+        () => ({
+          initialOptions: [],
+        }),
       ],
-      description: "The file path in the user's Dropbox to download.",
     },
     name: {
       type: "string",
-      label: "File name",
-      description: "The new name of the file to be saved, including it's extension. e.g: `myFile.csv`",
+      label: "File Name",
+      description: "The new name of the file to be saved, including its extension. e.g: `myFile.csv`",
       optional: true,
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   async run({ $ }) {
-    const { result } = await this.dropbox.downloadFile({
-      path: this.dropbox.getNormalizedPath(this.path, false),
-    });
+    try {
+      const linkResponse = await this.dropbox.filesGetTemporaryLink({
+        path: this.dropbox.getNormalizedPath(this.path, false),
+      });
 
-    const {
-      path, cleanup,
-    } = await file();
+      console.log("linkResponse: ", linkResponse);
 
-    const tmpPath = this.name
-      ? `/tmp/${this.name}`
-      : path;
+      if (!linkResponse || !linkResponse.result) {
+        throw new Error("Failed to get temporary download link from Dropbox");
+      }
 
-    await fs.promises.appendFile(tmpPath, Buffer.from(result.fileBinary));
-    await cleanup();
+      const {
+        link, metadata,
+      } = linkResponse.result;
 
-    delete result.fileBinary;
+      const fileName = this.name || metadata.name;
+      const cleanFileName = fileName.replace(/[?$#&{}[]<>\*!@:\+\\\/]/g, "");
 
-    $.export("$summary", `File successfully saved in "/tmp/${this.name}"`);
+      const tmpPath = checkTmp(cleanFileName);
+      const pipeline = promisify(stream.pipeline);
 
-    return {
-      tmpPath,
-      ...result,
-    };
+      await pipeline(
+        got.stream(link),
+        fs.createWriteStream(tmpPath),
+      );
+
+      $.export("$summary", `File successfully saved in "${tmpPath}"`);
+
+      return {
+        tmpPath,
+        ...metadata,
+      };
+    } catch (error) {
+      throw new Error(`Failed to download file: ${error.message}`);
+    }
   },
 };

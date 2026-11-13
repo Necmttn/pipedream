@@ -1,10 +1,11 @@
-import fs from "fs";
-import { axios } from "@pipedream/platform";
+import { ConfigurationError } from "@pipedream/platform";
+import { Readable } from "stream";
 import {
-  MY_DRIVE_VALUE,
+  GOOGLE_DRIVE_MIME_TYPE_PREFIX,
   LEGACY_MY_DRIVE_VALUE,
   MAX_FILE_OPTION_PATH_SEGMENTS,
-} from "../constants.mjs";
+  MY_DRIVE_VALUE,
+} from "../common/constants.mjs";
 
 /**
  * Returns whether the specified drive ID corresponds to the authenticated
@@ -46,44 +47,49 @@ function getListFilesOpts(drive, baseOpts = {}) {
   // Use default options (e.g., `corpora=drive`) for `files.list` if `drive` is
   // empty or is "My Drive". Otherwise, use the "drive" corpus and include
   // `supportsAllDrives` param.
-  const opts = (!drive || isMyDrive(drive))
-    ? baseOpts
-    : {
-      ...baseOpts,
-      corpora: "drive",
-      driveId: getDriveId(drive),
-      includeItemsFromAllDrives: true,
+
+  const {
+    limitToMyDrive, ...rest
+  } = baseOpts;
+
+  if (drive && isMyDrive(drive)) {
+    return {
+      ...rest,
+      corpora: "user",
       supportsAllDrives: true,
     };
-  return opts;
-}
-
-/**
- * Returns a file stream from a file URL or file path to be used in Google Drive
- * API calls
- *
- * @param {Object} opts - an object containing options for getting a file stream
- * @param {String} opts.fileUrl - the url of a file to download to a Readable
- * stream
- * @param {String} opts.filePath - the path to a file from which to create a
- * Readable stream
- * @returns {stream.Readable} a Readable stream from the file URL or file path
- */
-async function getFileStream({
-  fileUrl, filePath,
-}) {
-  if (fileUrl) {
-    try {
-      return await axios(this, {
-        url: fileUrl,
-        method: "GET",
-        responseType: "stream",
-      });
-    } catch (e) {
-      throw new Error(`Status ${e.response.status} ${e.response.statusText}. ${e.message}`);
-    }
   }
-  return fs.createReadStream(filePath);
+
+  if (drive && !isMyDrive(drive)) {
+    return {
+      ...rest,
+      corpora: "drive",
+      driveId: getDriveId(drive),
+      supportsAllDrives: true,
+      // Google's `files.list` API requires `includeItemsFromAllDrives: true`
+      // whenever `driveId` is set or `corpora` is `drive`/`allDrives`.
+      // Placed AFTER the spread so callers cannot downgrade this required value.
+      includeItemsFromAllDrives: true,
+    };
+  }
+
+  if (limitToMyDrive) {
+    return {
+      ...rest,
+      supportsAllDrives: true,
+    };
+  }
+
+  // No specific drive selected - search across all drives by default.
+  return {
+    ...rest,
+    corpora: "allDrives",
+    supportsAllDrives: true,
+    // Google's `files.list` API requires `includeItemsFromAllDrives: true`
+    // when `corpora` is `allDrives`. Placed AFTER the spread so callers
+    // cannot downgrade this required value.
+    includeItemsFromAllDrives: true,
+  };
 }
 
 function streamToBuffer(stream) {
@@ -133,7 +139,9 @@ function truncatePath(pathArr) {
  */
 function buildFilePaths(files = [], folders = []) {
   const folderIdToFolder = folders.reduce((acc, cur) => {
-    acc[cur.id] = cur;
+    if (cur?.id) {
+      acc[cur.id] = cur;
+    }
     return acc;
   }, {});
   const paths = {};
@@ -141,7 +149,7 @@ function buildFilePaths(files = [], folders = []) {
   // requisite parent folders are available (in `file.parents`) to the requesting user, or an array
   // containing the file ID otherwise
   const pathToFile = (file) => {
-    if (!file) {
+    if (!file?.id) {
       // unretrieved folder or root folder
       return [];
     }
@@ -168,7 +176,9 @@ function buildFilePaths(files = [], folders = []) {
     ];
   };
   files.forEach((file) => {
-    paths[file.id] = pathToFile(file);
+    if (file?.id) {
+      paths[file.id] = pathToFile(file);
+    }
   });
   return paths;
 }
@@ -183,7 +193,9 @@ function buildFilePaths(files = [], folders = []) {
  */
 function buildFileNamePaths(files = [], folders = []) {
   const fileIdToFile = files.concat(folders).reduce((acc, cur) => {
-    acc[cur.id] = cur;
+    if (cur?.id) {
+      acc[cur.id] = cur;
+    }
     return acc;
   }, {});
   const fileIdToPath = buildFilePaths(files, folders);
@@ -257,16 +269,221 @@ function toSingleLineString(multiLineString) {
     .replace(/\s{2,}/g, " ");
 }
 
+function optionalParseAsJSON(value) {
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    return value;
+  }
+}
+
+function parseObjectEntries(value = {}) {
+  let obj;
+  if (typeof value === "string") {
+    try {
+      obj = JSON.parse(value);
+    } catch (e) {
+      throw new ConfigurationError(`Invalid JSON string provided: ${e.message}`);
+    }
+  } else {
+    obj = value;
+  }
+  return Object.fromEntries(
+    Object.entries(obj).map(([
+      key,
+      value,
+    ]) => [
+      key,
+      optionalParseAsJSON(value),
+    ]),
+  );
+}
+
+/**
+ * Reserves a unique path among a set of paths already used in the current run,
+ * appending a numeric suffix (before the extension, if any) when `candidatePath`
+ * collides with one already reserved. Useful when generating file paths from
+ * user-controlled or duplicate-prone names (e.g. two Drive files sharing a
+ * name), so they don't silently overwrite one another on disk.
+ *
+ * @param {String} candidatePath the path to reserve
+ * @param {Set<String>} usedPaths paths already reserved in the current run;
+ * mutated in place to add whichever path is returned
+ * @returns `candidatePath` unchanged if it hasn't been used yet, otherwise a
+ * variant with a `" (n)"` suffix inserted before the extension
+ */
+function reserveUniqueFilePath(candidatePath, usedPaths) {
+  if (!usedPaths.has(candidatePath)) {
+    usedPaths.add(candidatePath);
+    return candidatePath;
+  }
+  const lastDot = candidatePath.lastIndexOf(".");
+  const lastSlash = candidatePath.lastIndexOf("/");
+  const hasExt = lastDot > lastSlash;
+  const base = hasExt
+    ? candidatePath.slice(0, lastDot)
+    : candidatePath;
+  const ext = hasExt
+    ? candidatePath.slice(lastDot)
+    : "";
+  let suffix = 2;
+  let uniquePath;
+  do {
+    uniquePath = `${base} (${suffix})${ext}`;
+    suffix += 1;
+  } while (usedPaths.has(uniquePath));
+  usedPaths.add(uniquePath);
+  return uniquePath;
+}
+
+// Drive allows "/" and arbitrary length in names; neither is valid in a single path segment.
+function sanitizeFileName(name) {
+  const safe = Buffer.from(name.replace(/[/\\\0]/g, "_"))
+    .subarray(0, 200)
+    .toString()
+    // Drop a multi-byte character split by the byte cut.
+    .replace(/�+$/, "");
+  if (!safe || safe === "." || safe === "..") {
+    return "_";
+  }
+  return safe;
+}
+
+/**
+ * Minimal inline worker pool. Runs `worker` over `items` with at most `limit`
+ * calls in flight at any moment and returns the results in input order.
+ *
+ * @param {Array} items the items to process
+ * @param {Number} limit the max number of concurrent `worker` calls
+ * @param {Function} worker async function invoked as `worker(item, index)`
+ * @returns {Promise<Array>} the results, in the same order as `items`
+ */
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  const runNext = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  };
+
+  const runners = [];
+  const poolSize = Math.min(limit, items.length);
+  for (let i = 0; i < poolSize; i++) {
+    runners.push(runNext());
+  }
+  await Promise.allSettled(runners);
+
+  return results;
+}
+
+async function stashFile(item, googleDrive, dir) {
+  const fileMetadata = await googleDrive.getFile(item.id, {
+    fields: "name,mimeType",
+  });
+  let mimeType = fileMetadata.mimeType;
+  const isWorkspaceDocument = mimeType.includes(GOOGLE_DRIVE_MIME_TYPE_PREFIX);
+  if (isWorkspaceDocument) {
+    mimeType = "application/pdf";
+  }
+  const response = isWorkspaceDocument
+    ? await googleDrive.downloadWorkspaceFile(item.id, {
+      mimeType,
+    })
+    : await googleDrive.getFile(item.id, {
+      alt: "media",
+    });
+  // Convert stream to buffer
+  const chunks = [];
+  for await (const chunk of response) {
+    chunks.push(chunk);
+  }
+  const buffer = Buffer.concat(chunks);
+  // Construct a file path unique to this attachment to avoid overwriting
+  // files with the same name.
+  const filepath = `${item.id}/${item.name}`;
+  // Upload the attachment to the configured directory (File Stash) so it
+  // can be accessed later.
+  const file = await dir.open(filepath).fromReadableStream(
+    Readable.from(buffer),
+    mimeType,
+    buffer.length,
+  );
+  // Return file details and temporary download link:
+  // { fileId, path, get_url, s3Key, type }
+  const stashedFile = await file.withoutPutUrl().withGetUrl();
+  return {
+    fileId: item.id,
+    ...stashedFile,
+  };
+}
+
+/**
+ * RFC 3339 date (`2026-01-31`) or date-time (`2026-01-31T00:00:00Z`). A
+ * date-time must carry a `Z` or numeric offset, as RFC 3339 requires: without
+ * one, `Date.parse` silently reads it in the runner's local timezone.
+ *
+ * The time fields spell out their RFC 3339 ranges rather than using `\d{2}`,
+ * because `Date.parse` accepts the ISO 8601 end-of-day hour `24` and rolls it
+ * into the next day (`...T24:00:00Z` becomes the 1st of the next month).
+ */
+const RFC_3339_REGEX =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[Tt]([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d+)?(?:[Zz]|[+-]([01]\d|2[0-3]):[0-5]\d))?$/;
+
+/**
+ * Validate an RFC 3339 timestamp and normalize it to a UTC ISO string.
+ *
+ * `Date.parse` alone is too permissive to use as the gate: it accepts
+ * locale-ambiguous input like `01/02/2026` and bare years like `2026`, and it
+ * rolls impossible dates over (`2026-02-31` becomes March 3) rather than
+ * rejecting them. Either would silently filter from the wrong instant.
+ *
+ * @param {String} value the user-supplied timestamp
+ * @param {String} label the prop label, used in the error message
+ * @returns {String} the timestamp normalized to a UTC ISO string
+ */
+function parseRfc3339(value, label) {
+  const match = RFC_3339_REGEX.exec(String(value).trim());
+  if (!match) {
+    throw new ConfigurationError(`Invalid ${label} "${value}". Use an RFC 3339 timestamp, e.g. "2026-01-31T00:00:00Z" or "2026-01-31".`);
+  }
+  const [
+    , year,
+    month,
+    day,
+  ] = match.map(Number);
+  // The shape is right, but `2026-02-31` still parses, so confirm the calendar
+  // date round-trips unchanged before trusting it.
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  const parsed = Date.parse(match[0]);
+  if (utc.getUTCFullYear() !== year
+    || utc.getUTCMonth() !== month - 1
+    || utc.getUTCDate() !== day
+    || Number.isNaN(parsed)) {
+    throw new ConfigurationError(`Invalid ${label} "${value}". That is not a real date or time.`);
+  }
+  return new Date(parsed).toISOString();
+}
+
 export {
-  MY_DRIVE_VALUE,
-  isMyDrive,
-  getDriveId,
-  getListFilesOpts,
-  getFileStream,
-  omitEmptyStringValues,
-  toSingleLineString,
   buildFilePaths,
-  getFilePaths,
-  streamToBuffer,
   byteToMB,
+  getDriveId,
+  getFilePaths,
+  getListFilesOpts,
+  isMyDrive,
+  mapWithConcurrency,
+  MY_DRIVE_VALUE,
+  omitEmptyStringValues,
+  parseObjectEntries,
+  parseRfc3339,
+  reserveUniqueFilePath,
+  sanitizeFileName,
+  stashFile,
+  streamToBuffer,
+  toSingleLineString,
 };
+

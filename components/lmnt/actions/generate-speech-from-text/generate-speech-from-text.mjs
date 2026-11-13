@@ -6,7 +6,12 @@ export default {
   key: "lmnt-generate-speech-from-text",
   name: "Generate Speech from Text",
   description: "Generates an audio file from the provided text. [See the documentation](https://docs.lmnt.com/api-reference/speech/synthesize-speech-1)",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     lmnt,
@@ -57,6 +62,11 @@ export default {
       label: "Output Filename",
       description: "The result will be written to this filename in the `/tmp` folder. If not specified, defaults to `output.mp3` or `output.wav` depending on the selected format.",
       optional: true,
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   async run({ $ }) {

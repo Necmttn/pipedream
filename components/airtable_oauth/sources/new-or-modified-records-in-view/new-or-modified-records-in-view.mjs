@@ -6,7 +6,7 @@ export default {
   name: "New or Modified Records in View",
   description: "Emit new event for each new or modified record in a view",
   key: "airtable_oauth-new-or-modified-records-in-view",
-  version: "0.0.5",
+  version: "0.0.16",
   type: "source",
   props: {
     ...base.props,
@@ -14,9 +14,6 @@ export default {
       propDefinition: [
         base.props.airtable,
         "tableId",
-        ({ baseId }) => ({
-          baseId,
-        }),
       ],
       description: "The table ID to watch for changes.",
     },
@@ -24,12 +21,6 @@ export default {
       propDefinition: [
         base.props.airtable,
         "viewId",
-        ({
-          baseId, tableId,
-        }) => ({
-          baseId,
-          tableId,
-        }),
       ],
       description: "The view ID to watch for changes.",
     },
@@ -42,25 +33,22 @@ export default {
   },
   async run(event) {
     const {
-      baseId,
-      tableId,
-      viewId,
+      baseId, tableId, viewId,
     } = this;
 
     const lastTimestamp = this._getLastTimestamp();
-    const params = {
+    const params = this.getListRecordsParams({
       view: viewId,
-      filterByFormula: `LAST_MODIFIED_TIME() > "${lastTimestamp}"`,
-      returnFieldsByFieldId: this.returnFieldsByFieldId,
-    };
+      formula: `LAST_MODIFIED_TIME() > "${lastTimestamp}"`,
+    });
 
-    const data = await this.airtable.listRecords({
+    const records = await this.airtable.listRecords({
       baseId,
       tableId,
       params,
     });
 
-    if (!data.records.length) {
+    if (!records.length) {
       console.log("No new or modified records.");
       return;
     }
@@ -72,21 +60,33 @@ export default {
     };
 
     let newRecords = 0, modifiedRecords = 0;
-    for (const record of data.records) {
+    for (const record of records) {
       if (!lastTimestamp || moment(record.createdTime) > moment(lastTimestamp)) {
-        record.type = "new_record";
+        this.$emit({
+          ...record,
+          type: "new_record",
+          metadata,
+        }, {
+          id: record.id,
+          summary: `New record: ${record.id}`,
+          ts: moment(record.createdTime).valueOf(),
+        });
         newRecords++;
+
       } else {
-        record.type = "record_modified";
+        const ts = Date.now();
+        const id = `${record.id}-${ts}`;
+        this.$emit({
+          ...record,
+          type: "record_modified",
+          metadata,
+        }, {
+          id,
+          summary: `Record modified: ${record.id}`,
+          ts,
+        });
         modifiedRecords++;
       }
-
-      record.metadata = metadata;
-
-      this.$emit(record, {
-        summary: `${record.type}: ${JSON.stringify(record.fields)}`,
-        id: record.id,
-      });
     }
     console.log(`Emitted ${newRecords} new records(s) and ${modifiedRecords} modified record(s).`);
 

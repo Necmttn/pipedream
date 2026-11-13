@@ -3,21 +3,26 @@ import calCom from "../../cal_com.app.mjs";
 export default {
   key: "cal_com-get-booking",
   name: "Get Booking",
-  description: "Retrieve a booking by its ID. [See the docs here](https://developer.cal.com/api/api-reference/bookings#find-a-booking)",
-  version: "0.0.1",
+  description: "Retrieve a booking by its UID. [See the documentation](https://cal.com/docs/api-reference/v2/bookings/get-a-booking)",
+  version: "1.0.0",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     calCom,
-    booking: {
+    bookingId: {
       propDefinition: [
         calCom,
-        "booking",
+        "bookingId",
       ],
     },
   },
   async run({ $ }) {
-    const response = await this.calCom.getBooking(this.booking, $);
-    $.export("$summary", `Successfully retrieved booking with ID ${this.booking}`);
+    const response = await this.calCom.getBooking(this.bookingId, $);
+    $.export("$summary", `Successfully retrieved booking with UID ${this.bookingId}`);
     return response;
   },
 };

@@ -222,6 +222,105 @@ const TICKET_FIELD_OPTIONS = [
   },
 ];
 
+const SORT_BY_OPTIONS = [
+  "assignee",
+  "assignee.name",
+  "created_at",
+  "group",
+  "id",
+  "requester",
+  "requester.name",
+  "status",
+  "subject",
+  "updated_at",
+];
+
+const ACCESS_OPTIONS = [
+  "personal",
+  "agents",
+  "shared",
+  "account",
+];
+
+const INCLUDE_OPTIONS = [
+  {
+    label: "The app installation that requires each macro, if present",
+    value: "app_installation",
+  },
+  {
+    label: "The macro categories",
+    value: "categories",
+  },
+  {
+    label: "The permissions for each macro",
+    value: "permissions",
+  },
+  {
+    label: "The number of times each macro has been used in the past hour",
+    value: "usage_1h",
+  },
+  {
+    label: "The number of times each macro has been used in the past day",
+    value: "usage_24h",
+  },
+  {
+    label: "The number of times each macro has been used in the past week",
+    value: "usage_7d",
+  },
+  {
+    label: "The number of times each macro has been used in the past thirty days",
+    value: "usage_30d",
+  },
+];
+
+const DYNAMIC_CONTENT_SORT_BY_OPTIONS = [
+  {
+    value: "locale",
+    label: "Locale",
+  },
+  {
+    value: "-locale",
+    label: "Locale (Descending)",
+  },
+  {
+    value: "outdated",
+    label: "Outdated",
+  },
+  {
+    value: "-outdated",
+    label: "Outdated (Descending)",
+  },
+  {
+    value: "active",
+    label: "Active",
+  },
+  {
+    value: "-active",
+    label: "Active (Descending)",
+  },
+  {
+    value: "updated_at",
+    label: "Updated At",
+  },
+  {
+    value: "-updated_at",
+    label: "Updated At (Descending)",
+  },
+  {
+    value: "created_at",
+    label: "Created At",
+  },
+  {
+    value: "-created_at",
+    label: "Created At (Descending)",
+  },
+];
+
+const SIDE_CONVERSATION_STATE_OPTIONS = [
+  "open",
+  "closed",
+];
+
 export default {
   SUBDOMAIN_PLACEHOLDER,
   BASE_URL,
@@ -242,4 +341,9 @@ export default {
   TICKET_PRIORITY_OPTIONS,
   TICKET_STATUS_OPTIONS,
   TICKET_FIELD_OPTIONS,
+  SORT_BY_OPTIONS,
+  ACCESS_OPTIONS,
+  INCLUDE_OPTIONS,
+  DYNAMIC_CONTENT_SORT_BY_OPTIONS,
+  SIDE_CONVERSATION_STATE_OPTIONS,
 };

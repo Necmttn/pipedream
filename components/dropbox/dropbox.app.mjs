@@ -1,90 +1,144 @@
-import dropbox from "dropbox";
+import { Dropbox } from "dropbox";
 import fetch from "isomorphic-fetch";
 import get from "lodash/get.js";
-import config from "./common/config.mjs";
-import isString from "lodash/isString.js";
 import isEmpty from "lodash/isEmpty.js";
 import isNil from "lodash/isNil.js";
-
-const Dropbox = dropbox.Dropbox;
+import isString from "lodash/isString.js";
+import config from "./common/config.mjs";
 
 export default {
   type: "app",
   app: "dropbox",
   propDefinitions: {
-    pathFolder: {
+    path: {
       type: "string",
       label: "Path",
-      description: "The folder path. (Please use a valid path to filter the values and type at least 2 characters after the latest '/' to perform the search.)",
+      description: "Type the file name to search for it in the user's Dropbox.",
       useQuery: true,
       withLabel: true,
       async options({
-        prevContext,
-        query,
-        returnSimpleString,
-        omitRootFolder,
+        query, prevContext: { cursor },
+        params,
+        initialOptions = [
+          {
+            label: "Root Folder",
+            value: "",
+          },
+        ],
+        filter = ({ metadata: { metadata: { [".tag"]: type } } }) => type === "file",
+        mapper = ({ metadata: { metadata } }) => ({
+          label: metadata.path_display,
+          value: metadata.path_lower,
+        }),
       }) {
-        if (prevContext?.reachedLastPage) {
+        try {
+          const dpx = await this.sdk();
+
+          if (cursor === null) {
+            return [];
+          }
+
+          if (cursor) {
+            const {
+              result: {
+                matches,
+                cursor: nextCursor,
+                has_more: hasMore,
+              },
+            } = await dpx.filesSearchContinueV2({
+              cursor,
+            });
+
+            return {
+              options: matches
+                .filter(filter)
+                .map(mapper),
+              context: {
+                cursor: hasMore
+                  ? nextCursor
+                  : null,
+              },
+            };
+          }
+
+          const {
+            result: {
+              matches,
+              cursor: nextCursor,
+              has_more: hasMore,
+            },
+          } = await dpx.filesSearchV2({
+            ...params,
+            query: query || "text",
+            options: {
+              path: params?.path || "",
+              max_results: config.SEARCH_FILE_FOLDERS.DEFAULT_MAX_RESULTS,
+              ...params?.options,
+            },
+          });
+
+          return {
+            options: initialOptions.concat(
+              matches
+                .filter(filter)
+                .map(mapper),
+            ),
+            context: {
+              cursor: hasMore
+                ? nextCursor
+                : null,
+            },
+          };
+
+        } catch (error) {
+          console.log("Error searching for files/folders", error);
           return [];
         }
-        return this.getPathOptions(
-          query,
-          {
-            omitFiles: true,
-            returnSimpleString,
-            omitRootFolder,
-          },
-        );
       },
     },
-    pathFile: {
+    sharedLinkUrl: {
       type: "string",
-      label: "Path",
-      description: "The file path. (Please use a valid path to filter the values)",
-      useQuery: true,
-      withLabel: true,
-      async options({
-        prevContext,
-        query,
-        returnSimpleString,
-        omitRootFolder,
-      }) {
-        if (prevContext?.reachedLastPage) {
-          return [];
-        }
-        return this.getPathOptions(
-          query,
-          {
-            omitFolders: true,
-            returnSimpleString,
-            omitRootFolder,
+      label: "Shared Link URL",
+      description: "The URL of a shared link",
+      async options({ prevContext }) {
+        const {
+          result: {
+            links, cursor,
           },
-        );
+        } = await this.listSharedLinks({
+          cursor: prevContext?.cursor,
+        });
+        const options = links?.map(({
+          url: value, name: label,
+        }) => ({
+          value,
+          label: `${label} - ${value}`,
+        })) || [];
+        return {
+          options,
+          context: {
+            cursor,
+          },
+        };
       },
     },
-    pathFileFolder: {
+    exportFormat: {
       type: "string",
-      label: "Path",
-      description: "The file or folder path. (Please use a valid path to filter the values)",
-      useQuery: true,
-      withLabel: true,
-      async options({
-        prevContext,
-        query,
-        returnSimpleString,
-        omitRootFolder,
-      }) {
-        if (prevContext?.reachedLastPage) {
-          return [];
-        }
-        return this.getPathOptions(
-          query,
-          {
-            returnSimpleString,
-            omitRootFolder,
-          },
-        );
+      label: "Export Format",
+      description: "The format to export the file in. Required for exportable files. Only supports exporting files that cannot be downloaded directly and whose ExportResult.file_metadata has ExportInfo.export_as populated.",
+      optional: true,
+      async options({ path }) {
+        const { result } = await this.filesGetMetadata({
+          path: this.getNormalizedPath(path, false),
+        });
+        return result?.export_info?.export_options || [];
       },
+    },
+    linkPassword: {
+      type: "string",
+      label: "Link Password",
+      description: "The password required to access the shared link",
+      optional: true,
     },
     fileRevision: {
       type: "string",
@@ -178,7 +232,7 @@ export default {
         const revisions = await dpx.filesListRevisions({
           path,
           mode: {
-            ".tag": "id",
+            ".tag": "path",
           },
         });
         return revisions.result?.entries?.map((revision) => ({
@@ -187,106 +241,6 @@ export default {
         }));
       } catch (err) {
         this.normalizeError(err);
-      }
-    },
-    async getPathOptions(path, opts = {}) {
-      try {
-        const {
-          omitFolders,
-          omitFiles,
-          omitRootFolder,
-        } = opts;
-
-        let data = [];
-        path = path === "/" || path === null
-          ? ""
-          : path;
-
-        if (path.length > 0 && !path.startsWith("/")) {
-          path = "/" + path;
-        }
-
-        if (path === "") {
-          const entries = await this.listFilesFolders({
-            path,
-            recursive: true,
-            include_mounted_folders: true,
-          });
-
-          data = entries.map((item) => ({
-            path: item.path_display,
-            type: item[".tag"],
-          }));
-
-        } else {
-          let subpath = "";
-          let query = path;
-          if ((path.match(/\//g) || []).length > 1) {
-            const splitPath = path.split("/");
-            query = splitPath.pop();
-            subpath = splitPath.join("/");
-          }
-          const res = await this.searchFilesFolders({
-            query,
-            options: {
-              path: subpath,
-            },
-          });
-
-          data = res.map(({ metadata }) => ({
-            path: metadata.metadata.path_display,
-            type: metadata.metadata[".tag"],
-          }));
-
-          const folders = data.filter((item) => item.type !== "file");
-          for (const folder of folders) {
-            const entries = await this.listFilesFolders({
-              path: folder.path,
-              recursive: true,
-              include_mounted_folders: true,
-            });
-            const folderData = entries?.map((item) => ({
-              path: item.path_display,
-              type: item[".tag"],
-            }));
-            data.push(...folderData);
-          }
-        }
-
-        if (omitFiles) {
-          data = data.filter((item) => item.type !== "file");
-        }
-
-        if (omitFolders) {
-          data = data.filter((item) => item.type !== "folder");
-        }
-
-        data = data.map((item) => ({
-          label: item.path,
-          value: item.path,
-        }));
-
-        if (path === "" && !omitFolders && !omitRootFolder) {
-          data = [
-            {
-              label: "Root Folder",
-              value: "",
-            },
-            ...data,
-          ];
-        }
-
-        data.sort((a, b) => {
-          return a > b ?
-            1 :
-            -1;
-        });
-
-        return data;
-
-      } catch (err) {
-        console.log(err);
-        return [];
       }
     },
     async initState(context) {
@@ -453,11 +407,12 @@ export default {
         const links = await dpx.sharingListSharedLinks({
           path: args.path,
         });
-        if (links.result?.links.length > 0) {
+        const link = links.result?.links.find((l) => l.path_lower === args.path);
+        if (link) {
           return await dpx.sharingModifySharedLinkSettings({
             ...args,
             path: undefined,
-            url: links.result?.links[0].url,
+            url: link.url,
             remove_expiration: isEmpty(args.remove_expiration)
               ? false
               : args.remove_expiration,
@@ -468,6 +423,30 @@ export default {
             remove_expiration: undefined,
           });
         }
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async listSharedLinks(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.sharingListSharedLinks(args);
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async getSharedLinkMetadata(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.sharingGetSharedLinkMetadata(args);
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async getSharedLinkFile(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.sharingGetSharedLinkFile(args);
       } catch (err) {
         this.normalizeError(err);
       }
@@ -484,6 +463,38 @@ export default {
       try {
         const dpx = await this.sdk();
         return await dpx.filesUpload(args);
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async filesGetTemporaryLink(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.filesGetTemporaryLink(args);
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async exportFile(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.filesExport(args);
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async filesGetPreview(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.filesGetPreview(args);
+      } catch (err) {
+        this.normalizeError(err);
+      }
+    },
+    async filesGetMetadata(args) {
+      try {
+        const dpx = await this.sdk();
+        return await dpx.filesGetMetadata(args);
       } catch (err) {
         this.normalizeError(err);
       }

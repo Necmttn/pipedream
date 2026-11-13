@@ -1,4 +1,6 @@
-import { axios } from "@pipedream/platform";
+import { Client } from "@microsoft/microsoft-graph-client";
+import "isomorphic-fetch";
+const DEFAULT_LIMIT = 50;
 
 export default {
   type: "app",
@@ -156,106 +158,130 @@ export default {
         };
       },
     },
+    userTaskId: {
+      type: "string",
+      label: "User Task ID",
+      description: "Identifier of a user task",
+      async options() {
+        const response = await this.listUserTasks();
+        return response.value?.map(({
+          id: value, title: label,
+        }) => ({
+          value,
+          label,
+        }));
+      },
+    },
+    conversationThreadId: {
+      type: "string",
+      label: "Conversation Thread ID",
+      description: "Identifier of the conversation thread associated with the task.",
+      optional: true,
+      async options({ groupId }) {
+        if (!groupId) {
+          return [];
+        }
+        const response = await this.listThreads({
+          groupId,
+        });
+        return response.value?.map(({
+          id: value, topic: label,
+        }) => ({
+          value,
+          label,
+        }));
+      },
+    },
   },
   methods: {
-    _baseUrl() {
-      return "https://graph.microsoft.com/v1.0";
-    },
-    _headers() {
-      return {
-        Authorization: `Bearer ${this.$auth.oauth_access_token}`,
-      };
-    },
-    _makeRequest({
-      $ = this,
-      path,
-      url,
-      ...args
-    }) {
-      return axios($, {
-        url: url || `${this._baseUrl()}${path}`,
-        headers: this._headers(),
-        ...args,
+    client() {
+      return Client.init({
+        authProvider: (done) => {
+          done(null, this.$auth.oauth_access_token);
+        },
       });
     },
-    listGroups(args = {}) {
-      return this._makeRequest({
-        path: "/groups",
-        ...args,
-      });
+    listGroups({ params = {} } = {}) {
+      return this.client().api("/groups")
+        .get(params);
     },
     listPlans({
-      groupId, ...args
+      groupId, params = {},
     }) {
-      return this._makeRequest({
-        path: `/groups/${groupId}/planner/plans`,
-        ...args,
-      });
+      return this.client().api(`/groups/${groupId}/planner/plans`)
+        .get(params);
     },
     listMembers({
-      groupId, ...args
+      groupId, params = {},
     }) {
-      return this._makeRequest({
-        path: `/groups/${groupId}/members`,
-        ...args,
-      });
+      return this.client().api(`/groups/${groupId}/members`)
+        .get(params);
     },
     listBuckets({
-      planId, ...args
+      planId, params = {},
     }) {
-      return this._makeRequest({
-        path: `/planner/plans/${planId}/buckets`,
-        ...args,
-      });
+      return this.client().api(`/planner/plans/${planId}/buckets`)
+        .get(params);
     },
     listTasks({
-      planId, ...args
+      planId, params = {},
     }) {
-      return this._makeRequest({
-        path: `/planner/plans/${planId}/tasks`,
-        ...args,
-      });
+      return this.client().api(`/planner/plans/${planId}/tasks`)
+        .get(params);
     },
-    createPlan(args = {}) {
-      return this._makeRequest({
-        path: "/planner/plans",
-        method: "POST",
-        ...args,
-      });
+    createPlan({ data = {} } = {}) {
+      return this.client().api("/planner/plans")
+        .post(data);
     },
-    createTask(args = {}) {
-      return this._makeRequest({
-        path: "/planner/tasks",
-        method: "POST",
-        ...args,
-      });
+    createTask({ data = {} } = {}) {
+      return this.client().api("/planner/tasks")
+        .post(data);
     },
-    createBucket(args = {}) {
-      return this._makeRequest({
-        path: "/planner/buckets",
-        method: "POST",
-        ...args,
-      });
+    createBucket({ data = {} } = {}) {
+      return this.client().api("/planner/buckets")
+        .post(data);
+    },
+    getTask({
+      taskId, params = {},
+    }) {
+      return this.client().api(`/planner/tasks/${taskId}`)
+        .get(params);
+    },
+    listUserTasks({ params = {} } = {}) {
+      return this.client().api("/me/planner/tasks")
+        .get(params);
+    },
+    listThreads({
+      groupId, params = {},
+    }) {
+      return this.client().api(`/groups/${groupId}/threads`)
+        .get(params);
     },
     async *paginate({
-      fn, args,
+      fn, args = {}, max,
     }) {
-      let nextLink;
+      const limit = DEFAULT_LIMIT;
+      args = {
+        ...args,
+        params: {
+          ...args?.params,
+          $top: limit,
+          $skip: 0,
+        },
+      };
+      let hasMore, count = 0;
       do {
-        if (nextLink) {
-          args = {
-            ...args,
-            url: nextLink,
-          };
-        }
         const response = await fn(args);
-
-        for (const value of response.value) {
-          yield value;
+        const { value } = response;
+        for (const item of value) {
+          yield item;
+          if (max && ++count >= max) {
+            return;
+          }
         }
-
-        nextLink = response["@odata.nextLink"];
-      } while (nextLink);
+        hasMore = response?.["@odata.nextLink"];
+        args.params["$skip"] += limit;
+      } while (hasMore);
     },
   },
 };

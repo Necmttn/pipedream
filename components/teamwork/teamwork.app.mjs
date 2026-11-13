@@ -4,6 +4,13 @@ export default {
   type: "app",
   app: "teamwork",
   propDefinitions: {
+    page: {
+      type: "integer",
+      label: "Page",
+      description: "The page of results to retrieve, zero-based.",
+      min: 0,
+      default: 0,
+    },
     tasklistId: {
       type: "string",
       label: "Tasklist Id",
@@ -72,6 +79,19 @@ export default {
         const tasks = await this.listProjectTasks(projectId, params);
         return tasks.map((item) => ({
           label: item.content,
+          value: item.id,
+        }));
+      },
+    },
+    companyId: {
+      type: "string",
+      label: "Company ID",
+      description: "ID of the company to list tasks from",
+      optional: true,
+      async options({ page }) {
+        const companies = await this.listCompanies(page + 1);
+        return companies.map((item) => ({
+          label: item.name,
           value: item.id,
         }));
       },
@@ -157,15 +177,51 @@ export default {
       }));
       return res?.tasklists || [];
     },
-    async listPeople(page, ctx = this) {
+    async getPerson(personId, ctx = this) {
+      const res = await axios(ctx, this._getAxiosParams({
+        method: "GET",
+        path: `people/${personId}.json`,
+      }));
+      return res?.person || {};
+    },
+    async listPeople(page, ctx = this, params = {}) {
       const res = await axios(ctx, this._getAxiosParams({
         method: "GET",
         path: "people.json",
         params: {
           page,
+          ...params,
         },
       }));
       return res?.people || [];
+    },
+    async createPerson(data, ctx = this) {
+      return axios(ctx, this._getAxiosParams({
+        method: "POST",
+        path: "people.json",
+        data: {
+          person: data,
+        },
+      }));
+    },
+    async updatePerson(personId, data, ctx = this) {
+      return axios(ctx, this._getAxiosParams({
+        method: "PUT",
+        path: `people/${personId}.json`,
+        data: {
+          person: data,
+        },
+      }));
+    },
+    async listCompanies(page, ctx = this) {
+      const res = await axios(ctx, this._getAxiosParams({
+        method: "GET",
+        path: "companies.json",
+        params: {
+          page,
+        },
+      }));
+      return res?.companies || [];
     },
     async listColumns(projectId, page, ctx = this) {
       const res = await axios(ctx, this._getAxiosParams({

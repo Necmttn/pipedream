@@ -1,0 +1,614 @@
+import { ConfigurationError } from "@pipedream/platform";
+import {
+  APPROX_CHAR_WIDTH, CELL_PADDING_ALLOWANCE, COMMENT_UPDATES_FAILED, DOCUMENT_FIELDS,
+  FIT_TO_CONTENT, MIN_COLUMN_WIDTH, POINTS, SUGGESTED_DELETION_MASK, TAB_CONTENT_LEGACY_FIELDS,
+} from "./constants.mjs";
+
+function getTextContentFromDocument(content) {
+  let textContent = "";
+  content.forEach((element) => {
+    if (element.paragraph) {
+      element.paragraph.elements.forEach((textRun) => {
+        if (textRun.textRun) {
+          textContent += textRun.textRun.content;
+        }
+      });
+    }
+  });
+  return textContent;
+}
+
+function addTextContentToDocument(response) {
+  const textContent = getTextContentFromDocument(response.body.content);
+  return {
+    textContent,
+    ...response,
+  };
+}
+
+function flattenTables(content) {
+  return (content || [])
+    .filter((element) => element.table)
+    .map((element) => ({
+      startIndex: element.startIndex,
+      endIndex: element.endIndex,
+      table: element.table,
+    }));
+}
+
+// Selects the table that was just inserted by ordinal position, not by
+// comparing startIndex values: inserting a table immediately before an
+// existing one gives the new table the exact startIndex the existing table
+// used to have, and shifts the existing table forward onto some other index.
+// Comparing indexes alone can't tell which of the two is "new" in that case,
+// so instead we count how many tables preceded the insertion point (before
+// inserting) and read off the table at that same position afterwards — a
+// newly inserted table can only ever occupy the slot at that ordinal index.
+function selectInsertedTable(beforeTables, afterTables, requestedIndex) {
+  if (afterTables.length !== beforeTables.length + 1) {
+    return null;
+  }
+  const precedingCount = requestedIndex == null
+    ? beforeTables.length
+    : beforeTables.filter(({ startIndex }) => startIndex < requestedIndex).length;
+  return afterTables[precedingCount] ?? null;
+}
+
+function collectTextWithIndices(content) {
+  let text = "";
+  const indexMap = [];
+
+  const walk = (elements) => {
+    (elements || []).forEach((element) => {
+      (element.paragraph?.elements || []).forEach((paragraphElement) => {
+        const content = paragraphElement.textRun?.content;
+        if (!content) {
+          return;
+        }
+        // Text in a pending suggested deletion still occupies indices but is
+        // invisible to the API's own matching (`replaceAllText`), so it is
+        // masked rather than matched.
+        const run = paragraphElement.textRun.suggestedDeletionIds?.length
+          ? SUGGESTED_DELETION_MASK.repeat(content.length)
+          : content;
+        const start = paragraphElement.startIndex ?? 0;
+        for (let offset = 0; offset < run.length; offset++) {
+          indexMap.push(start + offset);
+        }
+        text += run;
+      });
+      (element.table?.tableRows || []).forEach((row) => {
+        (row.tableCells || []).forEach((cell) => walk(cell.content));
+      });
+      if (element.tableOfContents) {
+        walk(element.tableOfContents.content);
+      }
+    });
+  };
+
+  walk(content);
+  return {
+    text,
+    indexMap,
+  };
+}
+
+function findTextRanges({
+  text, indexMap, needle, matchCase,
+}) {
+  const ranges = [];
+  if (!needle) {
+    return ranges;
+  }
+  const target = matchCase
+    ? needle
+    : needle.toLowerCase();
+
+  for (let i = 0; i + needle.length <= text.length; i++) {
+    const window = text.slice(i, i + needle.length);
+    const candidate = matchCase
+      ? window
+      : window.toLowerCase();
+    if (candidate !== target) {
+      continue;
+    }
+    ranges.push({
+      startIndex: indexMap[i],
+      endIndex: indexMap[i + needle.length - 1] + 1,
+    });
+    i += needle.length - 1;
+  }
+  return ranges;
+}
+
+// `#RRGGBB` (or `RRGGBB`) to the API's OptionalColor, whose channels are 0-1.
+function hexToOptionalColor(hex) {
+  const normalized = String(hex).trim()
+    .replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return null;
+  }
+  const channel = (start) => parseInt(normalized.slice(start, start + 2), 16) / 255;
+  return {
+    color: {
+      rgbColor: {
+        red: channel(0),
+        green: channel(2),
+        blue: channel(4),
+      },
+    },
+  };
+}
+
+function styleBuilder(unit = POINTS) {
+  const style = {};
+  const fields = [];
+
+  return {
+    style,
+    fields,
+    set(name, value) {
+      if (value == null) {
+        return;
+      }
+      style[name] = value;
+      fields.push(name);
+    },
+    setDimension(name, magnitude) {
+      if (magnitude == null) {
+        return;
+      }
+      this.set(name, {
+        magnitude,
+        unit,
+      });
+    },
+    get isEmpty() {
+      return !fields.length;
+    },
+    get mask() {
+      return fields.join(",");
+    },
+  };
+}
+
+function adjustPropDefinitions(props, app) {
+  return Object.fromEntries(
+    Object.entries(props).map(([
+      key,
+      prop,
+    ]) => {
+      if (typeof prop === "string") return [
+        key,
+        prop,
+      ];
+      const {
+        propDefinition, ...otherValues
+      } = prop;
+      if (propDefinition) {
+        const [
+          , ...otherDefs
+        ] = propDefinition;
+        return [
+          key,
+          {
+            propDefinition: [
+              app,
+              ...otherDefs,
+            ],
+            ...otherValues,
+          },
+        ];
+      }
+      return [
+        key,
+        otherValues.type === "app"
+          ? null
+          : otherValues,
+      ];
+    })
+      .filter(([
+        , value,
+      ]) => value),
+  );
+}
+
+/**
+ * RFC 3339 date (`2026-01-31`) or date-time (`2026-01-31T00:00:00Z`). A
+ * date-time must carry a `Z` or numeric offset, as RFC 3339 requires: without
+ * one, `Date.parse` silently reads it in the runner's local timezone.
+ *
+ * The time fields spell out their RFC 3339 ranges rather than using `\d{2}`,
+ * because `Date.parse` accepts the ISO 8601 end-of-day hour `24` and rolls it
+ * into the next day (`...T24:00:00Z` becomes the 1st of the next month).
+ */
+const RFC_3339_REGEX =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[Tt]([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d+)?(?:[Zz]|[+-]([01]\d|2[0-3]):[0-5]\d))?$/;
+
+/**
+ * Validate an RFC 3339 timestamp and normalize it to a UTC ISO string.
+ *
+ * `Date.parse` alone is too permissive to use as the gate: it accepts
+ * locale-ambiguous input like `01/02/2026` and bare years like `2026`, and it
+ * rolls impossible dates over (`2026-02-31` becomes March 3) rather than
+ * rejecting them. Either would silently filter from the wrong instant.
+ *
+ * @param {String} value the user-supplied timestamp
+ * @param {String} label the prop label, used in the error message
+ * @returns {String} the timestamp normalized to a UTC ISO string
+ */
+function parseRfc3339(value, label) {
+  const match = RFC_3339_REGEX.exec(String(value).trim());
+  if (!match) {
+    throw new ConfigurationError(`Invalid ${label} "${value}". Use an RFC 3339 timestamp, e.g. "2026-01-31T00:00:00Z" or "2026-01-31".`);
+  }
+  const [
+    , year,
+    month,
+    day,
+  ] = match.map(Number);
+  // The shape is right, but `2026-02-31` still parses, so confirm the calendar
+  // date round-trips unchanged before trusting it.
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  const parsed = Date.parse(match[0]);
+  if (utc.getUTCFullYear() !== year
+    || utc.getUTCMonth() !== month - 1
+    || utc.getUTCDate() !== day
+    || Number.isNaN(parsed)) {
+    throw new ConfigurationError(`Invalid ${label} "${value}". That is not a real date or time.`);
+  }
+  return new Date(parsed).toISOString();
+}
+
+// Split a field mask on its top-level commas only, so a nested selection like
+// `tabs(documentTab(body))` stays in one piece.
+function splitFieldMask(fields) {
+  const parts = [];
+  let depth = 0;
+  let current = "";
+  for (const char of String(fields)) {
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+      if (depth < 0) {
+        throw new ConfigurationError(`Invalid Fields mask "${fields}": unbalanced parentheses.`);
+      }
+    } else if (char === "," && !depth) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (depth) {
+    throw new ConfigurationError(`Invalid Fields mask "${fields}": unbalanced parentheses.`);
+  }
+  parts.push(current);
+  return parts;
+}
+
+// Docs field masks accept either camelCase or underscore-separated names, so
+// `document_id` and `documentId` are both valid.
+function normalizeFieldName(name) {
+  return name.replace(/_/g, "").toLowerCase();
+}
+
+const NORMALIZED_DOCUMENT_FIELDS = new Set(DOCUMENT_FIELDS.map(normalizeFieldName));
+const NORMALIZED_TAB_CONTENT_LEGACY_FIELDS = new Set(
+  TAB_CONTENT_LEGACY_FIELDS.map(normalizeFieldName),
+);
+
+// Top-level fields of `fields` that the Docs API refuses alongside tabs content.
+function getTabContentLegacyFields(fields) {
+  return splitFieldMask(fields ?? "")
+    .map((part) => part.split(/[/(.]/)[0].trim())
+    .filter((name) => NORMALIZED_TAB_CONTENT_LEGACY_FIELDS.has(normalizeFieldName(name)));
+}
+
+// Reject an unusable field mask BEFORE the caller mutates the document. Every
+// write action fetches the masked document to build its return value, so an
+// invalid mask would otherwise throw after the edit already landed, and a
+// retrying agent would apply the edit twice. Top-level names are checked
+// locally; a nested selection is checked by the Docs API itself with a masked
+// read, since only the API knows the full resource schema.
+async function validateFieldMask(googleDocs, documentId, fields, tabId) {
+  if (!fields) {
+    return;
+  }
+  const parts = splitFieldMask(fields).map((part) => part.trim());
+  if (parts.some((part) => !part)) {
+    throw new ConfigurationError(`Invalid Fields mask "${fields}": empty selection (check for a leading, trailing, or doubled comma).`);
+  }
+  const roots = parts.map((part) => part.split(/[/(.]/)[0].trim());
+  const unknown = roots
+    .filter((name) => !NORMALIZED_DOCUMENT_FIELDS.has(normalizeFieldName(name)));
+  if (unknown.length) {
+    throw new ConfigurationError(`Unknown Fields selection${unknown.length === 1
+      ? ""
+      : "s"} ${unknown.map((name) => `"${name}"`).join(", ")}. A field mask may only select top-level fields of the Google Docs document: ${DOCUMENT_FIELDS.join(", ")}.`);
+  }
+  const legacy = getTabContentLegacyFields(fields);
+  const selectsTabs = roots.some((name) => normalizeFieldName(name) === "tabs");
+  if (legacy.length && (tabId || selectsTabs)) {
+    throw new ConfigurationError(`With ${tabId
+      ? "a Tab ID"
+      : "`tabs` selected"}, ${legacy.map((name) => `"${name}"`).join(", ")} must be selected under \`tabs/documentTab\` (e.g. \`tabs/documentTab/${legacy[0]}\`), not at the top level.`);
+  }
+  if (/[()/.]/.test(fields)) {
+    await googleDocs.getDocument(documentId, Boolean(tabId), fields);
+  }
+}
+
+function selectTableAtIndex(tables, startIndex) {
+  return tables.find((table) => table.startIndex === startIndex);
+}
+
+// Longest line per column. Rows with merged cells are skipped, since their
+// cells no longer map to columns by position.
+function measureColumnTextLengths(table, columnCount) {
+  const lengths = new Array(columnCount).fill(0);
+  (table.table.tableRows || []).forEach((row) => {
+    const cells = row.tableCells || [];
+    if (cells.length !== columnCount) {
+      return;
+    }
+    cells.forEach((cell, columnIndex) => {
+      const longestLine = getTextContentFromDocument(cell.content || [])
+        .split("\n")
+        .reduce((longest, line) => Math.max(longest, line.trim().length), 0);
+      lengths[columnIndex] = Math.max(lengths[columnIndex], longestLine);
+    });
+  });
+  return lengths;
+}
+
+// FIT_TO_CONTENT uses estimated content widths, scaled down to fit totalWidth.
+// A subset of columns only gets its share of totalWidth.
+function resolveColumnWidths({
+  table, targets, widthType, width, totalWidth,
+}) {
+  if (widthType !== FIT_TO_CONTENT) {
+    return targets.map((index) => ({
+      index,
+      magnitude: width,
+    }));
+  }
+
+  const columnCount = table.table.columns
+    ?? table.table.tableRows?.[0]?.tableCells?.length
+    ?? targets.length;
+  const lengths = measureColumnTextLengths(table, columnCount);
+  const weightOf = (index) => Math.max(lengths[index] || 0, 1);
+  const estimateOf = (index) => Math.max(
+    MIN_COLUMN_WIDTH,
+    Math.ceil((weightOf(index) * APPROX_CHAR_WIDTH) + CELL_PADDING_ALLOWANCE),
+  );
+
+  const allWeight = Array.from({
+    length: columnCount,
+  }, (_, index) => weightOf(index)).reduce((sum, weight) => sum + weight, 0);
+  const targetWeight = targets.reduce((sum, index) => sum + weightOf(index), 0);
+  const ceiling = targets.length === columnCount
+    ? totalWidth
+    : Math.round((totalWidth * targetWeight) / (allWeight || 1));
+
+  const estimates = targets.map((index) => ({
+    index,
+    magnitude: estimateOf(index),
+  }));
+  const estimated = estimates.reduce((sum, { magnitude }) => sum + magnitude, 0);
+  const budget = Math.max(ceiling, targets.length * MIN_COLUMN_WIDTH);
+  if (estimated <= budget) {
+    return estimates;
+  }
+
+  const reserved = targets.length * MIN_COLUMN_WIDTH;
+  const shareable = Math.max(budget - reserved, 0);
+  const shares = targets.map((index) => (shareable * weightOf(index)) / (targetWeight || 1));
+  const widths = shares.map(Math.floor);
+  let leftover = shareable - widths.reduce((sum, width) => sum + width, 0);
+  // Largest remainders take the leftover points, so the total never exceeds budget.
+  const byRemainder = shares
+    .map((share, position) => [
+      share - widths[position],
+      position,
+    ])
+    .sort((a, b) => b[0] - a[0]);
+  for (const [
+    , position,
+  ] of byRemainder) {
+    if (leftover <= 0) {
+      break;
+    }
+    widths[position] += 1;
+    leftover -= 1;
+  }
+  return targets.map((index, position) => ({
+    index,
+    magnitude: MIN_COLUMN_WIDTH + widths[position],
+  }));
+}
+
+// Created and extended suggestions alike: an edit adjacent to an open
+// suggestion is folded into it and reported only as a summary update.
+function getSuggestionIds(responses) {
+  const ids = responses
+    .flatMap((response) => response?.data?.suggestionResponses ?? [])
+    .flatMap(({
+      createdSuggestionIds = [], updatedSummarySuggestionIds = [],
+    }) => [
+      ...createdSuggestionIds,
+      ...updatedSummarySuggestionIds,
+    ]);
+  return [
+    ...new Set(ids),
+  ];
+}
+
+function suggestionThreadsFailed(responses) {
+  return responses.some((response) =>
+    response?.data?.commentUpdateState === COMMENT_UPDATES_FAILED);
+}
+
+// Inserted and deleted runs also report an empty style change under their own
+// suggestion ID (measured). That is noise, but an empty change elsewhere can be
+// real: a suggested bullet removal carries only `bulletSuggestionState`.
+function isEmptySuggestedChange(change) {
+  return Object.entries(change ?? {})
+    .filter(([
+      key,
+    ]) => !key.endsWith("SuggestionState"))
+    .every(([
+      , value,
+    ]) => !value || !Object.keys(value).length);
+}
+
+function recordSuggestion(suggestions, suggestionId, {
+  type, tabId, range, text,
+}) {
+  if (!suggestions.has(suggestionId)) {
+    suggestions.set(suggestionId, {
+      suggestionId,
+      ...(tabId && {
+        tabId,
+      }),
+      types: new Set(),
+      inserted: [],
+      deleted: [],
+    });
+  }
+  const suggestion = suggestions.get(suggestionId);
+  suggestion.types.add(type);
+  // One suggestion can cover several places (e.g. every match of a Replace
+  // Text), so contiguous runs are joined and the rest kept apart.
+  if (text) {
+    const segments = type === "insertion"
+      ? suggestion.inserted
+      : suggestion.deleted;
+    const last = segments[segments.length - 1];
+    if (last && range && last.endIndex === range.startIndex) {
+      last.text += text;
+      last.endIndex = range.endIndex;
+    } else {
+      segments.push({
+        text,
+        endIndex: range?.endIndex,
+      });
+    }
+  }
+  if (range) {
+    const {
+      startIndex = range.startIndex, endIndex = range.endIndex,
+    } = suggestion;
+    suggestion.startIndex = Math.min(startIndex, range.startIndex);
+    suggestion.endIndex = Math.max(endIndex, range.endIndex);
+  }
+}
+
+function walkSuggestions(node, tabId, range, suggestions) {
+  if (Array.isArray(node)) {
+    node.forEach((child) => walkSuggestions(child, tabId, range, suggestions));
+    return;
+  }
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  // The API omits a zero `startIndex`, so only `endIndex` marks a ranged node.
+  const insertedOrDeleted = new Set([
+    ...(node.suggestedInsertionIds ?? []),
+    ...(node.suggestedDeletionIds ?? []),
+  ]);
+  const here = node.endIndex != null
+    ? {
+      startIndex: node.startIndex ?? 0,
+      endIndex: node.endIndex,
+    }
+    : range;
+  Object.entries(node).forEach(([
+    key,
+    value,
+  ]) => {
+    const match = key.match(/^suggested(\w+?)(Ids?|Changes)$/);
+    if (!match) {
+      walkSuggestions(value, tabId, here, suggestions);
+      return;
+    }
+    const type = match[1].charAt(0).toLowerCase() + match[1].slice(1);
+    // `InlineObject`, `List` and `PositionedObject` carry a single
+    // `suggestedInsertionId` string rather than an array.
+    let ids;
+    if (typeof value === "string") {
+      ids = [
+        value,
+      ];
+    } else if (Array.isArray(value)) {
+      ids = value;
+    } else {
+      ids = Object.keys(value ?? {})
+        .filter((id) => match[2] !== "Changes"
+          || !insertedOrDeleted.has(id)
+          || !isEmptySuggestedChange(value[id]));
+    }
+    ids.forEach((id) => recordSuggestion(suggestions, id, {
+      type,
+      tabId,
+      range: here,
+      text: (type === "insertion" || type === "deletion")
+        && typeof node.content === "string"
+        && node.content,
+    }));
+  });
+}
+
+// Every open suggestion in the given tabs, keyed by ID. The API has no
+// suggestions endpoint: each one exists only as `suggested*Ids` /
+// `suggested*Changes` fields scattered over the content it touches, so they
+// are gathered by walking the inline view of each tab.
+function collectSuggestions(tabs) {
+  const suggestions = new Map();
+  tabs.forEach((tab) => walkSuggestions(
+    tab.documentTab,
+    tab.tabProperties?.tabId,
+    null,
+    suggestions,
+  ));
+  const texts = (segments) => segments.map(({ text }) => text);
+  return [
+    ...suggestions.values(),
+  ].map(({
+    types, inserted, deleted, ...suggestion
+  }) => ({
+    ...suggestion,
+    types: [
+      ...types,
+    ],
+    ...(inserted.length && {
+      insertedText: texts(inserted),
+    }),
+    ...(deleted.length && {
+      deletedText: texts(deleted),
+    }),
+  }));
+}
+
+export default {
+  styleBuilder,
+  getSuggestionIds,
+  suggestionThreadsFailed,
+  collectSuggestions,
+  collectTextWithIndices,
+  findTextRanges,
+  hexToOptionalColor,
+  getTextContentFromDocument,
+  addTextContentToDocument,
+  flattenTables,
+  selectInsertedTable,
+  adjustPropDefinitions,
+  parseRfc3339,
+  splitFieldMask,
+  validateFieldMask,
+  getTabContentLegacyFields,
+  selectTableAtIndex,
+  resolveColumnWidths,
+};

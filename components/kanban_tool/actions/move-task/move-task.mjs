@@ -2,7 +2,12 @@ import app from "../../kanban_tool.app.mjs";
 
 export default {
   key: "kanban_tool-move-task",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   name: "Move Task",
   description: "Moves a task [See the docs here](https://kanbantool.com/developer/api-v3#updating-tasks)",
@@ -53,7 +58,7 @@ export default {
         workflow_stage_id: this.stageId,
       },
     });
-    $.export("$summary", `The task(ID: ${resp.id}) has been moved.`);
+    $.export("$summary", `Task(ID: ${resp.id}) moved`);
     return resp;
   },
 };

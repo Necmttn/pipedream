@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/zenkit",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Pipedream Zenkit Components",
   "main": "zenkit.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.1.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

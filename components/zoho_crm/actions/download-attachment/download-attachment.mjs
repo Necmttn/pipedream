@@ -5,7 +5,12 @@ export default {
   key: "zoho_crm-download-attachment",
   name: "Download Attachment",
   description: "Downloads an attachment file from Zoho CRM, saves it in the temporary file system and exports the file path for use in a future step.",
-  version: "0.2.1",
+  version: "0.2.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     zohoCrm,
@@ -34,6 +39,16 @@ export default {
         }),
       ],
     },
+    // This prop indicates that the otherwise ephemeral /tmp directory is automatically synced to a
+    // remote directory (if configured for the execution context), making files written by this
+    // action accessible for future executions.  Only files located in STASH_DIR or, for legacy
+    // action support, whose /tmp file paths are explicitly returned by `run` will be synced.
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
+      optional: true,
+    },
   },
   async run({ $ }) {
     const file = await this.zohoCrm.downloadAttachment(
@@ -43,7 +58,7 @@ export default {
       $,
     );
 
-    const filePath = "/tmp/" + this.attachmentId;
+    const filePath = (process.env.STASH_DIR || "/tmp") + "/" + this.attachmentId;
     fs.writeFileSync(filePath, file);
 
     $.export("$summary", "Successfully downloaded attachment");

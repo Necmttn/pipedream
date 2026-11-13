@@ -1,11 +1,12 @@
 import analytics from "../../google_analytics.app.mjs";
 import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+import utils from "../../common/utils.mjs";
 
 export default {
   key: "google_analytics-page-opened",
-  version: "0.0.4",
-  name: "New Page Opened",
-  description: "Emit new event when a page is viewed",
+  version: "0.2.0",
+  name: "New Page Opened (GA4)",
+  description: "Emit new event when a page is viewed (uses GA4 Data API)",
   type: "source",
   dedupe: "unique",
   props: {
@@ -17,16 +18,16 @@ export default {
         intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
       },
     },
-    viewId: {
+    property: {
       propDefinition: [
         analytics,
-        "viewId",
+        "property",
       ],
     },
   },
   hooks: {
     async deploy() {
-      const startDate = this.analytics.monthAgo();
+      const startDate = utils.monthAgo();
       this._setStartDate(startDate);
       await this.processEvent();
     },
@@ -54,32 +55,33 @@ export default {
     },
     async processEvent() {
       const startDate = this._getStartDate();
-      const data = {
-        resource: {
-          reportRequests: [
+
+      const propertyId = this.property.replace("properties/", "");
+
+      const report = await this.analytics.queryReportsGA4({
+        property: propertyId,
+        data: {
+          dateRanges: [
             {
-              viewId: this.viewId,
-              dateRanges: [
-                {
-                  startDate,
-                  endDate: "today",
-                },
-              ],
-              metrics: [
-                {
-                  expression: "ga:pageviews",
-                },
-              ],
+              startDate,
+              endDate: "today",
+            },
+          ],
+          metrics: [
+            {
+              name: "screenPageViews",
             },
           ],
         },
-      };
-      const { data: report } = await this.analytics.queryReports(data);
+      });
 
       const previousPageViews = this._getPageViews();
-      const pageViews = report.reports[0].data.totals[0].values[0];
 
-      if (!previousPageViews || pageViews > previousPageViews) {
+      const pageViews = report?.rows?.[0]?.metricValues?.[0]?.value
+        || report?.totals?.[0]?.metricValues?.[0]?.value
+        || "0";
+
+      if (!previousPageViews || parseInt(pageViews) > parseInt(previousPageViews)) {
         this._setPageViews(pageViews);
         const meta = this.generateMeta(pageViews, startDate);
         this.$emit(report, meta);

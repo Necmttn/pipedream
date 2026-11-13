@@ -1,12 +1,17 @@
 import smugmug from "../../smugmug.app.mjs";
-import fs from "fs";
+import { getFileStreamAndMetadata } from "@pipedream/platform";
 import FormData from "form-data";
 
 export default {
   key: "smugmug-upload-image",
   name: "Upload Image",
   description: "Uploads an image to a SmugMug album. [See the docs here](https://api.smugmug.com/services/api/?method=upload)",
-  version: "0.0.1",
+  version: "0.1.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     smugmug,
@@ -19,8 +24,15 @@ export default {
     },
     filePath: {
       type: "string",
-      label: "File Path",
-      description: "The path to the image file saved to the [`/tmp`directory](https://pipedream.com/docs/workflows/steps/code/nodejs/working-with-files/#the-tmp-directory)(e.g. `/tmp/image.png`).",
+      label: "File Path or URL",
+      description: "The file to upload. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`).",
+      format: "file-ref",
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
     },
   },
   async run({ $ }) {
@@ -32,8 +44,14 @@ export default {
     const albumUri = album.Response.Uri;
 
     const data = new FormData();
-    const file = fs.createReadStream(this.filePath);
-    data.append("file", file);
+    const {
+      stream, metadata,
+    } = await getFileStreamAndMetadata(this.filePath);
+    data.append("file", stream, {
+      contentType: metadata.contentType,
+      knownLength: metadata.size,
+      filename: metadata.name,
+    });
 
     const response = await this.smugmug.uploadImage(filename, albumUri, data, $);
     if (response.stat === "ok") {

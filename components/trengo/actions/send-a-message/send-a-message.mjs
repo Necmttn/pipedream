@@ -2,10 +2,16 @@ import app from "../../trengo.app.mjs";
 
 export default {
   type: "action",
+  ai: "optimized",
   key: "trengo-send-a-message",
-  version: "0.0.1",
+  version: "0.0.14",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   name: "Send A Message",
-  description: "This action can be used to easily send a message or an email without having to think about contacts or tickets, [See the docs](https://developers.trengo.com/reference/send-a-message-1)",
+  description: "This action can be used to easily send a message or an email without having to think about contacts or tickets, [See the documentation](https://developers.trengo.com/reference/send-a-message-1)",
   props: {
     app,
     channelId: {

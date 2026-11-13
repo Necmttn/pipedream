@@ -6,17 +6,15 @@ export default {
   name: "New Records in View",
   description: "Emit new event for each new record in a view",
   key: "airtable_oauth-new-records-in-view",
-  version: "0.0.5",
+  version: "0.0.15",
   type: "source",
+  dedupe: "unique",
   props: {
     ...base.props,
     tableId: {
       propDefinition: [
         base.props.airtable,
         "tableId",
-        ({ baseId }) => ({
-          baseId,
-        }),
       ],
       description: "The table ID to watch for changes.",
     },
@@ -24,12 +22,6 @@ export default {
       propDefinition: [
         base.props.airtable,
         "viewId",
-        ({
-          baseId, tableId,
-        }) => ({
-          baseId,
-          tableId,
-        }),
       ],
       description: "The view ID to watch for changes.",
     },
@@ -42,25 +34,22 @@ export default {
   },
   async run() {
     const {
-      baseId,
-      tableId,
-      viewId,
+      baseId, tableId, viewId,
     } = this;
 
     const lastTimestamp = this._getLastTimestamp();
-    const params = {
+    const params = this.getListRecordsParams({
       view: viewId,
-      filterByFormula: `CREATED_TIME() > "${lastTimestamp}"`,
-      returnFieldsByFieldId: this.returnFieldsByFieldId,
-    };
+      formula: `CREATED_TIME() > "${lastTimestamp}"`,
+    });
 
-    const data = await this.airtable.listRecords({
+    const records = await this.airtable.listRecords({
       baseId,
       tableId,
       params,
     });
 
-    if (!data.records.length) {
+    if (!records.length) {
       console.log("No new records.");
       return;
     }
@@ -73,12 +62,12 @@ export default {
 
     let maxTimestamp;
     let recordCount = 0;
-    for (const record of data.records) {
+    for (const record of records) {
       record.metadata = metadata;
 
       this.$emit(record, {
         ts: moment(record.createdTime).valueOf(),
-        summary: JSON.stringify(record.fields),
+        summary: `New record: ${record.id}`,
         id: record.id,
       });
       if (!maxTimestamp || moment(record.createdTime).valueOf() > moment(maxTimestamp).valueOf()) {

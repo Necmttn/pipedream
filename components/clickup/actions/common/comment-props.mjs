@@ -11,12 +11,11 @@ export default {
           workspaceId: c.workspaceId,
         }),
       ],
-      optional: true,
     },
     folderId: {
       propDefinition: [
         common.props.clickup,
-        "folders",
+        "folderId",
         (c) => ({
           spaceId: c.spaceId,
         }),
@@ -26,48 +25,31 @@ export default {
     listId: {
       propDefinition: [
         common.props.clickup,
-        "lists",
+        "listId",
         (c) => ({
           folderId: c.folderId,
           spaceId: c.spaceId,
         }),
       ],
-      optional: true,
     },
     taskId: {
       propDefinition: [
         common.props.clickup,
-        "tasks",
+        "taskId",
         (c) => ({
           listId: c.listId,
           useCustomTaskIds: c.useCustomTaskIds,
+          authorizedTeamId: c.authorizedTeamId,
         }),
       ],
-      optional: true,
-    },
-    viewId: {
-      propDefinition: [
-        common.props.clickup,
-        "views",
-        (c) => ({
-          workspaceId: c.workspaceId,
-          spaceId: c.spaceId,
-          listId: c.listId,
-          folderId: c.folderId,
-        }),
-      ],
-      optional: true,
     },
     commentId: {
       propDefinition: [
         common.props.clickup,
-        "comments",
+        "commentId",
         (c) => ({
-          listId: c.listId,
           taskId: c.taskId,
-          viewId: c.viewId,
-          useCustomTaskIds: c.useCustomTaskIds,
-          authorizedTeamId: c.authorizedTeamId,
+          listId: c.listId,
         }),
       ],
     },

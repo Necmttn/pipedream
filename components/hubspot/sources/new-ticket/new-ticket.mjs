@@ -1,14 +1,36 @@
+import {
+  DEFAULT_LIMIT,
+  DEFAULT_TICKET_PROPERTIES,
+} from "../../common/constants.mjs";
 import common from "../common/common.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "hubspot-new-ticket",
-  name: "New Tickets",
+  name: "New Ticket",
   description: "Emit new event for each new ticket created.",
-  version: "0.0.12",
+  version: "0.0.48",
   dedupe: "unique",
   type: "source",
-  hooks: {},
+  props: {
+    ...common.props,
+    info: {
+      type: "alert",
+      alertType: "info",
+      content: `Properties:\n\`${DEFAULT_TICKET_PROPERTIES.join(", ")}\``,
+    },
+    properties: {
+      propDefinition: [
+        common.props.hubspot,
+        "ticketProperties",
+        () => ({
+          excludeDefaultProperties: true,
+        }),
+      ],
+      label: "Additional properties to retrieve",
+    },
+  },
   methods: {
     ...common.methods,
     getTs(ticket) {
@@ -16,8 +38,7 @@ export default {
     },
     generateMeta(ticket) {
       const {
-        id,
-        properties,
+        id, properties,
       } = ticket;
       const ts = this.getTs(ticket);
       return {
@@ -29,20 +50,28 @@ export default {
     isRelevant(ticket, createdAfter) {
       return this.getTs(ticket) > createdAfter;
     },
-    getParams() {
-      return {
-        limit: 100,
-        sorts: [
-          {
-            propertyName: "createdate",
-            direction: "DESCENDING",
-          },
-        ],
+    getParams(after) {
+      const { properties = [] } = this;
+      return this.addDateFilter({
+        data: {
+          limit: DEFAULT_LIMIT,
+          sorts: [
+            {
+              propertyName: "createdate",
+              direction: "DESCENDING",
+            },
+          ],
+          properties: [
+            ...DEFAULT_TICKET_PROPERTIES,
+            ...properties,
+          ],
+        },
         object: "tickets",
-      };
+      }, "createdate", after);
     },
     async processResults(after, params) {
       await this.searchCRM(params, after);
     },
   },
+  sampleEmit,
 };

@@ -1,12 +1,18 @@
 import linkedin from "../../linkedin.app.mjs";
-import fs from "fs";
+import { getFileStreamAndMetadata } from "@pipedream/platform";
 import FormData from "form-data";
+import utils from "../../common/utils.mjs";
 
 export default {
   key: "linkedin-create-image-post-organization",
   name: "Create Image Post (Organization)",
-  description: "Create an image post on LinkedIn. [See the docs here](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/images-api?view=li-lms-2023-09&tabs=http#uploading-an-image)",
-  version: "0.0.1",
+  description: "Create an image post on LinkedIn. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/images-api?view=li-lms-2023-09&tabs=http#uploading-an-image)",
+  version: "1.1.1",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     linkedin,
@@ -16,16 +22,23 @@ export default {
         "organizationId",
       ],
     },
-    filePath: {
+    file: {
       type: "string",
-      label: "File Path",
-      description: "The path to the image file saved to the `/tmp` directory (e.g. `/tmp/image.png`). [See the documentation](https://pipedream.com/docs/workflows/steps/code/nodejs/working-with-files/#the-tmp-directory).",
+      label: "File Path or URL",
+      description: "The path or URL to the image file.",
+      format: "file-ref",
     },
     text: {
       propDefinition: [
         linkedin,
         "text",
       ],
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
     },
   },
   methods: {
@@ -66,18 +79,27 @@ export default {
       $,
     });
 
-    const filePath = this.filePath.startsWith("/tmp/")
-      ? this.filePath
-      : `/tmp/${this.filePath}`;
+    const {
+      stream, metadata,
+    } = await getFileStreamAndMetadata(this.file);
     const formData = new FormData();
-    formData.append("file", fs.createReadStream(filePath));
+    formData.append("file", stream, {
+      filename: metadata.name,
+      contentType: metadata.contentType,
+      knownLength: metadata.size,
+    });
 
     await this.uploadImage(uploadUrl, formData);
 
-    await this.linkedin.createPost({
+    const response = await this.linkedin.createPost({
+      returnFullResponse: true,
       data: {
-        author: this.organizationId,
-        commentary: this.text,
+        author: `urn:li:organization:${this.organizationId}`,
+        lifecycleState: "PUBLISHED",
+        distribution: {
+          feedDistribution: "MAIN_FEED",
+        },
+        commentary: utils.escapeText(this.text),
         visibility: "PUBLIC",
         content: {
           media: {
@@ -88,8 +110,15 @@ export default {
       $,
     });
 
-    $.export("$summary", "Successfully posted image.");
+    // LinkedIn returns the new post's URN in the `x-restli-id` response header, not in the body
+    const postId = response?.headers?.["x-restli-id"];
+    $.export("$summary", postId
+      ? `Successfully posted image with ID ${postId}`
+      : "Successfully posted image.");
 
-    // nothing to return
+    return {
+      id: postId,
+      image,
+    };
   },
 };

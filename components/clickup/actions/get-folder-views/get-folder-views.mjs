@@ -1,12 +1,17 @@
 import common from "../common/folder-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-get-folder-views",
   name: "Get Folder Views",
-  description: "Get all views of a folder. See the docs [here](https://clickup.com/api) in **Views / Get Folder Views** section.",
-  version: "0.0.7",
+  description: "Get all views of a folder. [See the documentation](https://clickup.com/api) in **Views / Get Folder Views** section.",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
-  props: common.props,
   async run({ $ }) {
     const { folderId } = this;
 

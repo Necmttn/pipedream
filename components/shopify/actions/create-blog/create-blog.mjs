@@ -1,21 +1,34 @@
-import app from "../../common/rest-admin.mjs";
-import common from "./common.mjs";
+import shopify from "../../shopify.app.mjs";
 
 export default {
-  ...common,
   key: "shopify-create-blog",
   name: "Create Blog",
-  description: "Create a new blog. [See The Documentation](https://shopify.dev/docs/api/admin-rest/2023-04/resources/blog#post-blogs)",
-  version: "0.0.4",
+  description: "Create a new blog. [See the documentation](https://shopify.dev/docs/api/admin-graphql/latest/mutations/blogCreate)",
+  version: "0.0.17",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
-    app,
+    shopify,
     title: {
+      type: "string",
+      label: "Title",
       description: "The title of the blog.",
-      propDefinition: [
-        app,
-        "title",
-      ],
     },
+  },
+  async run({ $ }) {
+    const response = await this.shopify.createBlog({
+      blog: {
+        title: this.title,
+      },
+    });
+    if (response.blogCreate.userErrors.length > 0) {
+      throw new Error(response.blogCreate.userErrors[0].message);
+    }
+    $.export("$summary", `Created new blog with ID ${response.blogCreate.blog.id}`);
+    return response;
   },
 };

@@ -1,12 +1,12 @@
-import asana from "../../asana.app.mjs";
 import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+import asana from "../../asana.app.mjs";
 
 export default {
   key: "asana-new-tag",
   type: "source",
   name: "New Tag",
   description: "Emit new event for each tag created in a workspace.",
-  version: "0.0.7",
+  version: "0.0.17",
   dedupe: "unique",
   props: {
     asana,
@@ -16,7 +16,7 @@ export default {
       type: "string",
       propDefinition: [
         asana,
-        "workspaces",
+        "workspacesAsync",
       ],
       optional: true,
     },

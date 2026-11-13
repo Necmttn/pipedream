@@ -1,10 +1,16 @@
 import common from "../common/space-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-get-folders",
   name: "Get Folders",
-  description: "Get a list of folders in a workplace. See the docs [here](https://clickup.com/api) in **Folders / Get Folders** section.",
-  version: "0.0.7",
+  description: "Get a list of folders in a workplace. [See the documentation](https://clickup.com/api) in **Folders / Get Folders** section.",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     ...common.props,

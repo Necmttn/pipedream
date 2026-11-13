@@ -28,6 +28,26 @@ interface AccountLocation {
   location: string;
 }
 
+export interface ListAccountsParams extends PdAxiosRequest {
+  params?: {
+    parentAccount?: string;
+    pageSize?: number;
+    pageToken?: string;
+    filter?: string;
+  };
+}
+
+export interface ListLocationsParams extends PdAxiosRequest {
+  account: string;
+  params?: {
+    pageSize?: number;
+    pageToken?: string;
+    filter?: string;
+    orderBy?: string;
+    readMask?: string;
+  };
+}
+
 export interface ListPostsParams extends PaginatedRequest, AccountLocation { }
 export interface ListReviewsParams extends PaginatedRequest, AccountLocation { }
 
@@ -48,5 +68,20 @@ export interface UpdateReplyParams extends PdAxiosRequest, AccountLocation {
   review: string;
   data: {
     comment: string;
+  };
+}
+
+export interface GetReviewParams extends PdAxiosRequest, AccountLocation {
+  review: string;
+}
+
+export interface BatchGetReviewsParams extends PdAxiosRequest {
+  account: string;
+  data: {
+    locationNames: string[];
+    pageSize?: number;
+    pageToken?: string;
+    orderBy?: string;
+    ignoreRatingOnlyReviews?: boolean;
   };
 }

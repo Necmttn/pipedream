@@ -1,20 +1,26 @@
-import googleDrive from "../../google_drive.app.mjs";
 import {
   getListFilesOpts,
   toSingleLineString,
 } from "../../common/utils.mjs";
+import googleDrive from "../../google_drive.app.mjs";
 
 import {
-  MY_DRIVE_VALUE,
   GOOGLE_DRIVE_FOLDER_MIME_TYPE,
-} from "../../constants.mjs";
+  MY_DRIVE_VALUE,
+} from "../../common/constants.mjs";
 
 export default {
   key: "google_drive-create-folder",
   name: "Create Folder",
-  description: "Create a new empty folder. [See the docs](https://developers.google.com/drive/api/v3/reference/files/create) for more information",
-  version: "0.1.1",
+  description: "Create a new empty folder. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/create) for more information",
+  version: "0.1.31",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     googleDrive,
     drive: {
@@ -32,6 +38,7 @@ export default {
           drive: c.drive,
         }),
       ],
+      label: "Parent Folder",
       description: toSingleLineString(`
         Select a folder in which to place the new folder.
         If not specified, the folder will be placed directly in the drive's top-level folder.
@@ -77,9 +84,17 @@ export default {
       } else {
         q += ` and '${driveId}' in parents`;
       }
-      const folders = (await this.googleDrive.listFilesInPage(null, getListFilesOpts(drive, {
+
+      const opts = getListFilesOpts(driveId, {
+        // Used for querying 'shared with me' folders that the user does not have direct access to
+        // within a shared drive (e.g., when the user can't select the driveId of the shared drive).
+        corpora: "user",
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
         q,
-      }))).files;
+      });
+
+      const folders = (await this.googleDrive.listFilesInPage(null, opts)).files;
 
       if (folders.length) {
         $.export("$summary", "Found existing folder, therefore not creating folder. Returning found folder.");

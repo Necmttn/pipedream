@@ -2,7 +2,12 @@ import bybit from "../../bybit.app.mjs";
 
 export default {
   name: "ByBit Linear Position Switch Mode",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "bybit-linear-position-switch-mode",
   description: "If you are in One-Way Mode, you can only open one position on Buy or Sell side. " +
       "If you are in Hedge Mode, you can open both Buy and Sell side positions simultaneously.\n" +
@@ -31,6 +36,7 @@ export default {
     },
   },
   type: "action",
+  ai: "optimized",
   async run({ $ }) {
     const API_METHOD = "POST";
     const API_PATH = "/private/linear/position/switch-mode";

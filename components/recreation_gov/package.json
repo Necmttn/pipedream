@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/recreation_gov",
-  "version": "0.0.2",
+  "version": "0.1.1",
   "description": "Pipedream Recreation.gov Components",
-  "main": "dist/app/recreation_gov.app.mjs",
+  "main": "recreation_gov.app.mjs",
   "keywords": [
     "pipedream",
     "recreation_gov"
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.5.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

@@ -1,12 +1,18 @@
-import common from "../common/task-props.mjs";
-import constants from "../common/constants.mjs";
 import { ConfigurationError } from "@pipedream/platform";
+import constants from "../common/constants.mjs";
+import common from "../common/task-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-update-task",
   name: "Update Task",
-  description: "Update a task. See the docs [here](https://clickup.com/api) in **Tasks / Update Task** section.",
-  version: "0.0.9",
+  description: "Update a task. [See the documentation](https://clickup.com/api) in **Tasks / Update Task** section.",
+  version: "0.0.14",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,
@@ -39,29 +45,6 @@ export default {
       ],
       optional: true,
     },
-    status: {
-      propDefinition: [
-        common.props.clickup,
-        "statuses",
-        (c) => ({
-          listId: c.listId,
-        }),
-      ],
-      optional: true,
-    },
-    parent: {
-      label: "Parent Task",
-      propDefinition: [
-        common.props.clickup,
-        "tasks",
-        (c) => ({
-          listId: c.listId,
-          useCustomTaskIds: c.useCustomTaskIds,
-          authorizedTeamId: c.authorizedTeamId,
-        }),
-      ],
-      optional: true,
-    },
     dueDate: {
       label: "Due Date",
       type: "string",
@@ -72,6 +55,62 @@ export default {
       label: "Start Date",
       type: "string",
       description: "The start date of task, please use `YYYY-MM-DD` format",
+      optional: true,
+    },
+    folderId: {
+      propDefinition: [
+        common.props.clickup,
+        "folderId",
+        (c) => ({
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    listId: {
+      propDefinition: [
+        common.props.clickup,
+        "listId",
+        (c) => ({
+          folderId: c.folderId,
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    taskId: {
+      propDefinition: [
+        common.props.clickup,
+        "taskId",
+        (c) => ({
+          listId: c.listId,
+          useCustomTaskIds: c.useCustomTaskIds,
+          authorizedTeamId: c.authorizedTeamId,
+        }),
+      ],
+      description: "To show options please select a **List** first",
+    },
+    status: {
+      propDefinition: [
+        common.props.clickup,
+        "status",
+        (c) => ({
+          listId: c.listId,
+        }),
+      ],
+      optional: true,
+    },
+    parent: {
+      propDefinition: [
+        common.props.clickup,
+        "taskId",
+        (c) => ({
+          listId: c.listId,
+          useCustomTaskIds: c.useCustomTaskIds,
+          authorizedTeamId: c.authorizedTeamId,
+        }),
+      ],
+      label: "Parent Task ID",
       optional: true,
     },
   },

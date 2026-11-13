@@ -1,4 +1,4 @@
-import component from "../../../slack/actions/list-replies/list-replies.mjs";
+import component from "@pipedream/slack/actions/list-replies/list-replies.mjs";
 import constants from "../../common/constants.mjs";
 import utils from "../../common/utils.mjs";
 
@@ -17,7 +17,7 @@ export default {
       conversation: {
         propDefinition: [
           undefined,
-          "channelId",
+          "conversation",
           () => ({
             types: [
               constants.CHANNEL_TYPE.PUBLIC,
@@ -31,13 +31,13 @@ export default {
       timestamp: {
         propDefinition: [
           undefined,
-          "timestamp",
+          "messageTs",
         ],
         optional: false,
       },
     },
   }),
   key: "slack_bot-list-replies",
-  description: "Retrieve a thread of messages posted to a conversation (Bot). [See docs here](https://api.slack.com/methods/conversations.replies)",
-  version: "0.0.2",
+  description: "Retrieve a thread of messages posted to a conversation (Bot). [See the documentation](https://api.slack.com/methods/conversations.replies)",
+  version: "0.0.6",
 };

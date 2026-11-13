@@ -9,32 +9,28 @@ export default {
       type: "$.interface.http",
       customResponse: true,
     },
-    metafieldNamespaces: {
-      type: "string[]",
-      label: "Metafield Namespaces",
-      description: "Array of namespaces for any metafields that should be included with each webhook",
-      optional: true,
-    },
-    privateMetafieldNamespaces: {
-      type: "string[]",
-      label: "Private Metafield Namespaces",
-      description: "Array of namespaces for any private metafields that should be included with each webhook",
-      optional: true,
-    },
   },
   hooks: {
     async activate() {
-      const { result: webhook } = await this.app.createWebhook({
-        address: this.http.endpoint,
-        topic: this.getTopic(),
-        metafield_namespaces: this.metafieldNamespaces,
-        private_metafield_namespaces: this.privateMetafieldNamespaces,
-      });
-      this.setWebhookId(webhook.id);
+      const { webhookSubscriptionCreate: { webhookSubscription: { id } } }
+        = await this.app.createWebhook({
+          topic: this.getTopic(),
+          webhookSubscription: {
+            callbackUrl: this.http.endpoint,
+            format: "JSON",
+            metafieldNamespaces: [
+              ...(this.metafieldNamespaces || []),
+              ...(this.privateMetafieldNamespaces || []),
+            ],
+          },
+        });
+      this.setWebhookId(id);
     },
     async deactivate() {
       const webhookId = this.getWebhookId();
-      await this.app.deleteWebhook(webhookId);
+      if (webhookId) {
+        await this.app.deleteWebhook(webhookId);
+      }
     },
   },
   methods: {
@@ -57,7 +53,40 @@ export default {
         shopId,
       ] = domain.split(constants.DOMAIN_SUFFIX);
       return this.app.getShopId() === shopId
-        && this.getTopic() === topic;
+        && constants.EVENT_TOPIC[this.getTopic()] === topic;
+    },
+    checkMetaFields({
+      metafields = [], private_metafields: privateMetafields = [],
+    } = {}) {
+      let validateMetafield = true;
+      let validatePrivateMetafield = true;
+      if (this.metafieldNamespaces?.length) {
+        validateMetafield = false;
+        for (const metafieldNamespace of this.metafieldNamespaces) {
+          for (const metafieldObj of metafields) {
+            if (metafieldObj.namespace === metafieldNamespace) {
+              validateMetafield = true;
+              break;
+            }
+          }
+          if (validateMetafield) break;
+        }
+      }
+
+      if (this.privateMetafieldNamespaces?.length) {
+        validatePrivateMetafield = false;
+        for (const privateMetafieldNamespace of this.privateMetafieldNamespaces) {
+          for (const privateMetafieldObj of privateMetafields) {
+            if (privateMetafieldObj.namespace === privateMetafieldNamespace) {
+              validatePrivateMetafield = true;
+              break;
+            }
+          }
+          if (validatePrivateMetafield) break;
+        }
+      }
+
+      return validateMetafield && validatePrivateMetafield;
     },
     isRelevant() {
       return true;

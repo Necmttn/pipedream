@@ -4,11 +4,28 @@ import converter from "../../../helper_functions/actions/xml-to-json/xml-to-json
 export default {
   key: "salesforce_rest_api-convert-soap-xml-to-json",
   name: "Convert SOAP XML Object to JSON",
-  description: "Converts a SOAP XML Object received from Salesforce to JSON",
-  version: "0.0.5",
+  description: "Convert a SOAP XML payload received from Salesforce into JSON."
+    + " Use this on the raw body delivered by an outbound-message trigger; it makes no API call."
+    + " Every other Salesforce action already returns JSON, so this is only needed for outbound-message workflows."
+    + " "
+    + "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api.meta/api/sforce_api_om_outboundmessaging.htm)",
+  version: "0.0.13",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     salesforce_rest_api,
+    infoBox: {
+      type: "alert",
+      alertType: "info",
+      content: `This action is useful in conjunction with Salesforce Flow Builder, and is primarily used if Instant triggers are not working for your use case.
+\\
+[See the documentation](https://pipedream.com/apps/salesforce-rest-api#troubleshooting) for more details.`,
+    },
     xml: {
       type: "string",
       label: "XML Soap Object",
@@ -17,14 +34,14 @@ export default {
     extractNotificationOnly: {
       type: "boolean",
       label: "Extract Notifications Only",
-      description: "Extracts only the notification parts from the XML. Default: `true`.",
+      description: "Whether to extract only the notification parts from the XML. Default: `true`.",
       optional: true,
       default: true,
     },
     failOnError: {
       type: "boolean",
       label: "Fail on Error",
-      description: "If should fail on error when extracting notifications. Default: `false`.",
+      description: "Whether the action should fail if an error occurs when extracting notifications. Default: `false`.",
       optional: true,
       default: false,
     },
@@ -44,6 +61,7 @@ export default {
     try {
       const notifications = json.elements[0].elements[0].elements[0].elements
         .filter(({ name }) => name === "Notification");
+      $.export("$summary", "Successfully converted to JSON and extracted notifications");
       return {
         notifications,
       };

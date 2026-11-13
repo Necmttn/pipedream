@@ -8,7 +8,12 @@ import {
 export default {
   key: "coinmarketcal-search-events",
   name: "Search Events",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   description: "Retrieve a list of events based on specified filters. [See the docs here](https://coinmarketcal.com/en/doc/redoc#/paths/~1events/get)",
   type: "action",
   props: {
@@ -57,12 +62,6 @@ export default {
       type: "boolean",
       label: "Show Views",
       description: "Show the number of views of the event.",
-      optional: true,
-    },
-    showVotes: {
-      type: "boolean",
-      label: "Show Votes",
-      description: "Show the number of votes of the event.",
       optional: true,
     },
     translations: {

@@ -1,5 +1,6 @@
 import { axios } from "@pipedream/platform";
 import constants from "./common/constants.mjs";
+import utils from "./common/utils.mjs";
 
 export default {
   type: "app",
@@ -10,7 +11,7 @@ export default {
       label: "Account ID",
       description: "Identifier of the account for this contact",
       async options({ page }) {
-        const { accounts } = await this.listAccounts({
+        const { accounts } = await this.searchAccounts({
           params: {
             page: page + 1,
           },
@@ -23,12 +24,34 @@ export default {
         })) || [];
       },
     },
+    organizationId: {
+      type: "string",
+      label: "Organization ID",
+      description: "Identifier of an Apollo organization. Type to search by name. Use **Search For Organizations** to discover IDs.",
+      useQuery: true,
+      async options({
+        page, query,
+      }) {
+        const { organizations } = await this.searchOrganizations({
+          params: {
+            page: page + 1,
+            q_organization_name: query,
+          },
+        });
+        return organizations?.map(({
+          id: value, name: label,
+        }) => ({
+          value,
+          label,
+        })) || [];
+      },
+    },
     contactId: {
       type: "string",
       label: "Contact ID",
       description: "Identifier of the contact to update",
       async options({ page }) {
-        const { contacts } = await this.listContacts({
+        const { contacts } = await this.searchContacts({
           params: {
             page: page + 1,
           },
@@ -97,6 +120,50 @@ export default {
         })) || [];
       },
     },
+    ownerId: {
+      type: "string",
+      label: "Owner ID",
+      description: "Identifier of the user to associate as owner.",
+      async options() {
+        const { users } = await this.listUsers();
+        return users?.map(({
+          id: value, name: label,
+        }) => ({
+          value,
+          label,
+        })) || [];
+      },
+    },
+    opportunityId: {
+      type: "string",
+      label: "Opportunity ID",
+      description: "The ID of the opportunity.",
+      async options({ page }) {
+        const { opportunities } = await this.listOpportunities({
+          page: page + 1,
+        });
+        return opportunities?.map(({
+          id: value, name: label,
+        }) => ({
+          value,
+          label,
+        })) || [];
+      },
+    },
+    opportunityStageId: {
+      type: "string",
+      label: "Opportunity Stage ID",
+      description: "The ID of the current stage.",
+      async options() {
+        const { opportunity_stages: stages } = await this.listOpportunityStages();
+        return stages?.map(({
+          id: value, name: label,
+        }) => ({
+          value,
+          label,
+        })) || [];
+      },
+    },
     email: {
       type: "string",
       label: "Email",
@@ -129,8 +196,12 @@ export default {
     labelNames: {
       type: "string[]",
       label: "Label Names",
-      description: "A list of names to tag this newly created contact. If the name does not exist, Apollo will automatically create it",
+      description: "A list of names to tag this contact. You can select the labels from the list or create new ones using a custom expression, i.e., `[\"label1\", \"label2\"]`",
       optional: true,
+      async options() {
+        const response = await this.listLabels();
+        return response.map(({ name }) => name) || [];
+      },
     },
     address: {
       type: "string",
@@ -167,12 +238,12 @@ export default {
       return {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
+        "X-Api-Key": this.$auth.api_key,
         ...headers,
       };
     },
     getParams(params) {
       return {
-        api_key: this.$auth.api_key,
         ...params,
       };
     },
@@ -195,15 +266,15 @@ export default {
         ...args,
       });
     },
-    listAccounts(args = {}) {
+    put(args = {}) {
       return this.makeRequest({
-        path: "/accounts/search",
+        method: "put",
         ...args,
       });
     },
-    listContacts(args = {}) {
+    patch(args = {}) {
       return this.makeRequest({
-        path: "/contacts/search",
+        method: "patch",
         ...args,
       });
     },
@@ -220,7 +291,7 @@ export default {
       });
     },
     listSequences(args = {}) {
-      return this.makeRequest({
+      return this.post({
         path: "/emailer_campaigns/search",
         ...args,
       });
@@ -231,9 +302,26 @@ export default {
         ...args,
       });
     },
-    createContact(args = {}) {
+    listUsers(args = {}) {
       return this.makeRequest({
-        method: "POST",
+        path: "/users/search",
+        ...args,
+      });
+    },
+    listOpportunities(args = {}) {
+      return this.makeRequest({
+        path: "/opportunities/search",
+        ...args,
+      });
+    },
+    listOpportunityStages(args = {}) {
+      return this.makeRequest({
+        path: "/opportunity_stages",
+        ...args,
+      });
+    },
+    createContact(args = {}) {
+      return this.post({
         path: "/contacts",
         ...args,
       });
@@ -241,38 +329,55 @@ export default {
     updateContact({
       contactId, ...args
     }) {
-      return this.makeRequest({
-        method: "PUT",
+      return this.put({
         path: `/contacts/${contactId}`,
         ...args,
       });
     },
     updateContactStage(args = {}) {
-      return this.makeRequest({
-        method: "POST",
+      return this.post({
         path: "/contacts/update_stages",
         ...args,
       });
     },
     createAccount(args = {}) {
-      return this.makeRequest({
-        method: "POST",
+      return this.post({
         path: "/accounts",
+        ...args,
+      });
+    },
+    createOpportunity(args = {}) {
+      return this.post({
+        path: "/opportunities",
+        ...args,
+      });
+    },
+    updateOpportunity({
+      opportunityId, ...args
+    }) {
+      return this.patch({
+        path: `/opportunities/${opportunityId}`,
+        ...args,
+      });
+    },
+    getOpportunity({
+      opportunityId, ...args
+    }) {
+      return this.makeRequest({
+        path: `/opportunities/${opportunityId}`,
         ...args,
       });
     },
     updateAccount({
       accountId, ...args
     }) {
-      return this.makeRequest({
-        method: "PUT",
+      return this.put({
         path: `/accounts/${accountId}`,
         ...args,
       });
     },
     updateAccountStage(args = {}) {
-      return this.makeRequest({
-        method: "POST",
+      return this.post({
         path: "/accounts/bulk_update",
         ...args,
       });
@@ -280,23 +385,69 @@ export default {
     addContactsToSequence({
       sequenceId, ...args
     }) {
-      return this.makeRequest({
-        method: "POST",
+      return this.post({
         path: `/emailer_campaigns/${sequenceId}/add_contact_ids`,
         ...args,
       });
     },
+    searchAccounts(args = {}) {
+      return this.post({
+        path: "/accounts/search",
+        ...args,
+      });
+    },
     searchContacts(args = {}) {
-      return this.makeRequest({
+      return this.post({
         path: "/contacts/search",
         ...args,
       });
     },
-    async *getResourcesStream({
+    peopleSearch(args = {}) {
+      return this.post({
+        path: "/mixed_people/api_search",
+        ...args,
+      });
+    },
+    searchOrganizations(args = {}) {
+      return this.post({
+        path: "/mixed_companies/search",
+        ...args,
+      });
+    },
+    listOrganizationJobPostings({
+      organizationId, ...args
+    } = {}) {
+      return this.makeRequest({
+        path: `/organizations/${organizationId}/job_postings`,
+        ...args,
+      });
+    },
+    getOrganization({
+      organizationId, ...args
+    } = {}) {
+      return this.makeRequest({
+        path: `/organizations/${organizationId}`,
+        ...args,
+      });
+    },
+    searchNewsArticles(args = {}) {
+      return this.post({
+        path: "/news_articles/search",
+        ...args,
+      });
+    },
+    listLabels(args = {}) {
+      return this.makeRequest({
+        path: "/labels",
+        ...args,
+      });
+    },
+    async *getIterations({
       resourceFn,
       resourceFnArgs,
       resourceName,
       max = constants.DEFAULT_MAX,
+      perPage = constants.DEFAULT_LIMIT,
     }) {
       let page = 1;
       let resourcesCount = 0;
@@ -307,6 +458,7 @@ export default {
             ...resourceFnArgs,
             params: {
               ...resourceFnArgs.params,
+              per_page: perPage,
               page,
             },
           });
@@ -327,8 +479,16 @@ export default {
           }
         }
 
+        if (nextResources.length < perPage) {
+          console.log("No next page");
+          return;
+        }
+
         page += 1;
       }
+    },
+    paginate(args = {}) {
+      return utils.iterate(this.getIterations(args));
     },
   },
 };

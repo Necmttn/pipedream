@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/refersion",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "description": "Pipedream Refersion Components",
-  "main": "refersion.app.js",
+  "main": "refersion.app.mjs",
   "keywords": [
     "pipedream",
     "refersion"
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.3.0"
+    "@pipedream/platform": "^1.6.8"
   }
 }

@@ -1,13 +1,11 @@
-import { axios } from "@pipedream/platform";
-import FeedParser from "feedparser";
-import { Item } from "feedparser";
-import hash from "object-hash";
-import { defineApp } from "@pipedream/types";
 import {
   ConfigurationError, DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
 } from "@pipedream/platform";
+import { defineApp } from "@pipedream/types";
+import axios from "axios";
+import FeedParser, { Item } from "feedparser";
 import { ReadStream } from "fs";
-import querystring from "querystring";
+import hash from "object-hash";
 
 export default defineApp({
   type: "app",
@@ -33,7 +31,7 @@ export default defineApp({
   },
   methods: {
     // in theory if alternate setting title and description or aren't unique this won't work
-    itemTs(item = {} as (Item | any)): number {
+    itemTs(item = {} as (Item | any)): number { // eslint-disable-line @typescript-eslint/no-explicit-any
       const {
         pubdate, pubDate, date_published,
       } = item;
@@ -43,7 +41,7 @@ export default defineApp({
       }
       return +new Date();
     },
-    itemKey(item = {} as (Item | any)): string {
+    itemKey(item = {} as (Item | any)): string { // eslint-disable-line @typescript-eslint/no-explicit-any
       const {
         id, guid, link, title,
       } = item;
@@ -56,19 +54,16 @@ export default defineApp({
       }
       return hash(item);
     },
-    async fetchFeed(url: string): Promise<any> {
-      const params = querystring.parse(url);
-      url = url.split("?")[0];
-      const res = await axios(this, {
+    async fetchFeed(url: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+      const res = await axios.request({
         url,
         method: "GET",
         headers: {
           "accept": "text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8, application/json, application/feed+json",
+          "User-Agent": "@PipedreamHQ/pipedream v1.0",
         },
         validateStatus: () => true, // does not throw on any bad status code
         responseType: "stream", // stream is required for feedparser
-        returnFullResponse: true,
-        params,
       });
 
       // Handle status codes as error codes
@@ -92,7 +87,7 @@ export default defineApp({
         feedparser.on("error", reject);
         feedparser.on("end", resolve);
         feedparser.on("readable", function (this: FeedParser) {
-          let item: any = this.read();
+          let item: any = this.read(); // eslint-disable-line @typescript-eslint/no-explicit-any
 
           while (item) {
             /*
@@ -125,7 +120,7 @@ export default defineApp({
       });
       return items;
     },
-    isJSONFeed(response: any): boolean {
+    isJSONFeed(response: any): boolean { // eslint-disable-line @typescript-eslint/no-explicit-any
       const acceptedJsonFeedMimes = [
         "application/feed+json",
         "application/json",
@@ -162,7 +157,7 @@ export default defineApp({
       return url;
     },
     sortItems(items) {
-      return items.sort((itemA: any, itemB: any) => {
+      return items.sort((itemA: any, itemB: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
         if (this.itemTs(itemA) > this.itemTs(itemB)) {
           return 1;
         }

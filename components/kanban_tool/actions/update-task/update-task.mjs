@@ -2,7 +2,12 @@ import app from "../../kanban_tool.app.mjs";
 
 export default {
   key: "kanban_tool-update-task",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   name: "Update Task",
   description: "Updates a task with the given parameters [See the docs here](https://kanbantool.com/developer/api-v3#updating-tasks)",
@@ -105,7 +110,7 @@ export default {
         due_date: this.dueDate,
       },
     });
-    $.export("$summary", `The task(ID: ${resp.id}) has been updated successfully.`);
+    $.export("$summary", `Task(ID: ${resp.id}) updated successfully.`);
     return resp;
   },
 };

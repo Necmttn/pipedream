@@ -5,8 +5,14 @@ export default {
   key: "sendgrid-delete-contacts",
   name: "Delete Contacts",
   description: "Allows you to delete one or more contacts. [See the docs here](https://docs.sendgrid.com/api-reference/contacts/delete-contacts)",
-  version: "0.0.3",
+  version: "0.0.7",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     ...common.props,
     deleteAllContacts: {

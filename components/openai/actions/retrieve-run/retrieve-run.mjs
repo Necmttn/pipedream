@@ -4,7 +4,12 @@ export default {
   key: "openai-retrieve-run",
   name: "Retrieve Run (Assistants)",
   description: "Retrieves a specific run within a thread. [See the documentation](https://platform.openai.com/docs/api-reference/runs/getRun)",
-  version: "0.0.6",
+  version: "0.0.19",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     openai,
@@ -26,6 +31,7 @@ export default {
   },
   async run({ $ }) {
     const response = await this.openai.retrieveRun({
+      $,
       threadId: this.threadId,
       runId: this.runId,
     });

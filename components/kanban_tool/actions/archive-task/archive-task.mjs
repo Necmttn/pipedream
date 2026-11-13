@@ -2,7 +2,12 @@ import app from "../../kanban_tool.app.mjs";
 
 export default {
   key: "kanban_tool-archive-task",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   name: "Archive Task",
   description: "Archives a task [See the docs here](https://kanbantool.com/developer/api-v3#archiving-tasks)",
@@ -32,7 +37,7 @@ export default {
         _action: "archive",
       },
     });
-    $.export("$summary", `The task(ID: ${resp.id}) has been archived.`);
+    $.export("$summary", `Task(ID: ${resp.id}) archived`);
     return resp;
   },
 };

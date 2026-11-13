@@ -3,16 +3,23 @@ import expensify from "../../app/expensify.app";
 
 export default defineAction({
   key: "expensify-create-expense",
-  version: "0.0.2",
+  version: "0.0.7",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   name: "Create Expense",
   description: "Creates a new expense. [See docs here](https://integrations.expensify.com/Integration-Server/doc/#expense-creator)",
   type: "action",
+  ai: "optimized",
   props: {
     expensify,
     employeeEmail: {
-      label: "Employee Email",
-      description: "The expenses will be created in this account.",
-      type: "string",
+      propDefinition: [
+        expensify,
+        "employeeEmail",
+      ],
     },
     currency: {
       label: "Currency",
@@ -42,7 +49,7 @@ export default defineAction({
     },
   },
   async run({ $ }) {
-    const response = this.expensify.createExpense({
+    const response = await this.expensify.createExpense({
       $,
       data: {
         employeeEmail: this.employeeEmail,

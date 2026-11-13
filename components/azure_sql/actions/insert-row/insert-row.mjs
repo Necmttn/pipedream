@@ -4,7 +4,12 @@ export default {
   key: "azure_sql-insert-row",
   name: "Insert Row",
   description: "Inserts a new row in a table. [See the documentation](https://learn.microsoft.com/en-us/sql/t-sql/statements/insert-transact-sql?view=azuresqldb-current)",
-  version: "0.0.1",
+  version: "0.0.7",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     app,
@@ -15,6 +20,12 @@ export default {
         "table",
       ],
       reloadProps: true,
+    },
+    requestTimeout: {
+      propDefinition: [
+        app,
+        "requestTimeout",
+      ],
     },
   },
   async additionalProps() {
@@ -41,6 +52,7 @@ export default {
     const {
       app,
       table,
+      requestTimeout,
       ...inputs
     } = this;
 
@@ -48,6 +60,7 @@ export default {
       $,
       table,
       inputs,
+      requestTimeout,
       summary: () => "Successfully inserted row.",
     });
   },

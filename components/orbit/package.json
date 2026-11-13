@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/orbit",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Pipedream Orbit Components",
-  "main": "orbit.app.js",
+  "main": "orbit.app.mjs",
   "keywords": [
     "pipedream",
     "orbit"
@@ -13,7 +13,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.3.0",
+    "@pipedream/platform": "^1.6.8",
     "uuid": "^9.0.0"
   }
 }

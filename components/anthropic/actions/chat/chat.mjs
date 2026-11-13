@@ -1,20 +1,27 @@
-import anthropic from "../../app/anthropic.app.mjs";
-import constants from "../common/constants.mjs";
+import anthropic from "../../anthropic.app.mjs";
+
+// Claude Opus 4.7 and later, and every Claude 5 model, return a 400 error for
+// `temperature`, `top_p` and `top_k`: https://platform.claude.com/docs/en/models/sonnet-5-5/overview
+const MODELS_WITHOUT_SAMPLING = /^claude-(fable|mythos|(opus|sonnet|haiku)-([5-9]|\d{2,})|opus-4-[7-9])/;
 
 export default {
   name: "Chat",
-  version: "0.0.4",
+  version: "0.2.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "anthropic-chat",
-  description: "The Chat API. [See the documentation](https://docs.anthropic.com/claude/reference/complete_post)",
+  description: "The Chat API. [See the documentation](https://docs.anthropic.com/claude/reference/messages_post)",
   type: "action",
   props: {
     anthropic,
     model: {
-      label: "Model",
-      description: "Select the model to use for your query. Defaults to the latest stable `claude-2` model, which Anthropic describes as having \"superior performance on tasks that require complex reasoning\".",
-      type: "string",
-      options: constants.COMPLETION_MODELS,
-      default: constants.COMPLETION_MODELS[0],
+      propDefinition: [
+        anthropic,
+        "model",
+      ],
     },
     userMessage: {
       label: "User Message",
@@ -29,19 +36,19 @@ export default {
     },
     temperature: {
       label: "Temperature",
-      description: "**Optional**. Amount of randomness injected into the response. Ranges from 0 to 1. Use temp closer to 0 for analytical / multiple choice, and temp closer to 1 for creative and generative tasks.",
+      description: "**Optional**. Amount of randomness injected into the response. Ranges from 0 to 1, e.g. `0.7`. Use temp closer to 0 for analytical / multiple choice, and temp closer to 1 for creative and generative tasks. Not sent to models that don't accept it: Claude Opus 4.7 and later, and the Claude 5 models such as `claude-sonnet-5-5`.",
       type: "string",
       optional: true,
     },
     topK: {
       label: "Top K",
-      description: "Only sample from the top K options for each subsequent token. Used to remove `long tail` low probability responses.",
+      description: "Only sample from the top K options for each subsequent token. Used to remove `long tail` low probability responses, e.g. `40`. Not sent to models that don't accept it: Claude Opus 4.7 and later, and the Claude 5 models such as `claude-sonnet-5-5`.",
       type: "integer",
       optional: true,
     },
     topP: {
       label: "Top P",
-      description: "Does nucleus sampling, in which we compute the cumulative distribution over all the options for each subsequent token in decreasing probability order and cut it off once it reaches a particular probability specified.",
+      description: "Does nucleus sampling, in which we compute the cumulative distribution over all the options for each subsequent token in decreasing probability order and cut it off once it reaches a particular probability specified, e.g. `0.9`. Not sent to models that don't accept it: Claude Opus 4.7 and later, and the Claude 5 models such as `claude-sonnet-5-5`.",
       type: "string",
       optional: true,
     },
@@ -52,52 +59,64 @@ export default {
     },
   },
   async run({ $ }) {
-    let prompt = "";
+    const messages = [];
 
-    this.messages = typeof this.messages === "string"
+    const priorMessages = typeof this.messages === "string"
       ? JSON.parse(this.messages)
       : this.messages;
 
-    if (this.messages && this.messages.length) {
+    if (priorMessages?.length) {
       let isUserMessage = true;
 
-      for (const message of this.messages) {
-        prompt += `\n\n${isUserMessage
-          ? "Human"
-          : "Assistant"}: ${message}`;
+      for (const message of priorMessages) {
+        messages.push({
+          role: isUserMessage
+            ? "user"
+            : "assistant",
+          content: message,
+        });
 
         isUserMessage = !isUserMessage;
       }
-    } else {
-      this.messages = [];
     }
 
-    prompt = `\n\nHuman: ${this.userMessage}\n\nAssistant:`;
-    this.messages.push(this.userMessage);
+    messages.push({
+      role: "user",
+      content: this.userMessage,
+    });
 
-    const response = await this.anthropic.createChatCompletion({
+    const sendSampling = !MODELS_WITHOUT_SAMPLING.test(this.model);
+
+    const response = await this.anthropic.createMessage({
       $,
       data: {
-        prompt,
+        messages,
         model: this.model,
-        max_tokens_to_sample: this.maxTokensToSample,
-        temperature: this.temperature
+        max_tokens: this.maxTokensToSample,
+        temperature: sendSampling && this.temperature
           ? parseFloat(this.temperature)
           : undefined,
-        top_p: this.topP
+        top_p: sendSampling && this.topP
           ? parseFloat(this.topP)
           : undefined,
-        top_k: this.topK,
+        top_k: sendSampling
+          ? this.topK
+          : undefined,
       },
     });
 
     if (response) {
-      $.export("$summary", `Successfully sent chat with ID ${response.log_id}`);
+      const samplingSkipped = !sendSampling
+        && (this.temperature || this.topP || Number.isInteger(this.topK));
+      $.export("$summary", `Successfully sent message with ID ${response.id}${samplingSkipped
+        ? `. Temperature, Top K and Top P were not sent: ${this.model} does not accept them`
+        : ""}`);
     }
 
+    const originalMessages = messages.map(({ content }) => content);
     return {
-      original_messages: this.messages,
-      original_messages_with_assistant_response: this.messages.concat(response.completion),
+      original_messages: originalMessages,
+      original_messages_with_assistant_response: originalMessages.concat(response.content[0].text),
       ...response,
     };
   },

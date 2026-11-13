@@ -8,7 +8,12 @@ export default {
   name: "Change Nickname",
   description: "Modifies the nickname of the current user in a guild.",
   type: "action",
-  version: "0.0.8",
+  version: "1.0.1",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     ...common.props,
     nick: {

@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/zoho_bigin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pipedream Zoho Bigin Components",
   "main": "zoho_bigin.app.mjs",
   "keywords": [
@@ -16,6 +16,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.5.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

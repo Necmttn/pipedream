@@ -11,7 +11,12 @@ import {
 export default {
   key: "click2mail2-create-job",
   name: "Create Job",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   description: "Creates a new new job in your account. [See the documentation](https://developers.click2mail.com/reference/post_2).",
   type: "action",
   props: {
@@ -159,7 +164,7 @@ export default {
     businessReplyAddressId: {
       type: "integer",
       label: "Business Reply Address Id",
-      description: "If you are mailing a business reply mail product use this to specify the busines reply address and permit information already in your account.",
+      description: "If you are mailing a business reply mail product use this to specify the business reply address and permit information already in your account.",
       optional: true,
     },
     courtesyReplyAddressId: {

@@ -3,10 +3,16 @@ import { getFileUploadBody } from "../../common/common-file-upload.mjs";
 
 export default {
   name: "Upload File Version",
-  description: "Update a file's content. [See the documentation](https://developer.box.com/reference/post-files-id-content/).",
+  description: "Uploads a new version of an existing Box file (max 50MB), replacing its current content; prior versions are kept in version history on premium accounts. Optionally rename the file at the same time. Use **List File Versions** to review version history afterward. [See the documentation](https://developer.box.com/reference/post-files-id-content/).",
   key: "box-upload-file-version",
-  version: "0.0.1",
+  version: "0.1.9",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     app,
     folderId: {
@@ -15,7 +21,7 @@ export default {
         "parentId",
       ],
       label: "Folder",
-      description: "Folder containing the file to update",
+      description: "The folder containing the file to update. Use `0` for the root folder. Use the **List Folders** action to retrieve folder IDs.",
       optional: false,
     },
     fileId: {
@@ -47,6 +53,12 @@ export default {
       ],
       description: "An optional new name for the file. If specified, the file will be renamed when the new version is uploaded.",
     },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
+    },
   },
   methods: {
     getFileUploadBody,
@@ -55,7 +67,7 @@ export default {
     const {
       file, fileId, createdAt, modifiedAt, fileName, parentId,
     } = this;
-    const data = this.getFileUploadBody({
+    const data = await this.getFileUploadBody({
       file,
       createdAt,
       modifiedAt,

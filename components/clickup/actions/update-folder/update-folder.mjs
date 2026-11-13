@@ -1,10 +1,16 @@
 import common from "../common/folder-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-update-folder",
   name: "Update Folder",
-  description: "Update a folder. See the docs [here](https://clickup.com/api) in **Folders / Update Folder** section.",
-  version: "0.0.7",
+  description: "Update a folder. [See the documentation](https://clickup.com/api) in **Folders / Update Folder** section.",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,

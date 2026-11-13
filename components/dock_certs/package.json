@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/dock_certs",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Pipedream Dock Certs Components",
   "main": "dock_certs.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.5.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

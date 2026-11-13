@@ -1,12 +1,17 @@
 import common from "../common/comment-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-delete-comment",
   name: "Delete Comment",
-  description: "Deletes a comment. See the docs [here](https://clickup.com/api) in **Comments / Deleet Comment** section.",
-  version: "0.0.7",
+  description: "Deletes a comment. [See the documentation](https://clickup.com/api) in **Comments / Deleet Comment** section.",
+  version: "0.0.12",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
-  props: common.props,
   async run({ $ }) {
     const { commentId } = this;
 

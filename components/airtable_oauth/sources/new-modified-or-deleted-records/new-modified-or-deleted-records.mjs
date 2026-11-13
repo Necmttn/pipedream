@@ -4,19 +4,17 @@ import moment from "moment";
 export default {
   ...base,
   name: "New, Modified or Deleted Records",
-  key: "airtable_oauth-new-modified-or-deleted-records",
-  version: "0.0.5",
-  type: "source",
   description: "Emit new event each time a record is added, updated, or deleted in an Airtable table. Supports tables up to 10,000 records",
+  key: "airtable_oauth-new-modified-or-deleted-records",
+  version: "0.0.15",
+  type: "source",
+  dedupe: "unique",
   props: {
     ...base.props,
     tableId: {
       propDefinition: [
         base.props.airtable,
         "tableId",
-        ({ baseId }) => ({
-          baseId,
-        }),
       ],
       description: "The table ID to watch for changes.",
     },
@@ -38,9 +36,7 @@ export default {
   },
   async run(event) {
     const {
-      baseId,
-      tableId,
-      viewId,
+      baseId, tableId, viewId,
     } = this;
 
     const metadata = {
@@ -52,10 +48,52 @@ export default {
     const prevAllRecordIds = this._getPrevAllRecordIds();
 
     const lastTimestamp = this._getLastTimestamp();
-    const params = {
-      filterByFormula: `LAST_MODIFIED_TIME() > "${lastTimestamp}"`,
-      returnFieldsByFieldId: this.returnFieldsByFieldId,
-    };
+    const params = this.getListRecordsParams({
+      formula: `LAST_MODIFIED_TIME() > "${lastTimestamp}"`,
+    });
+
+    const records = await this.airtable.listRecords({
+      baseId,
+      tableId,
+      params,
+    });
+
+    let newRecordsCount = 0,
+      modifiedRecordsCount = 0,
+      deletedRecordsCount = 0;
+
+    if (records) {
+      for (const record of records) {
+        if (!lastTimestamp || moment(record.createdTime) > moment(lastTimestamp)) {;
+          this.$emit({
+            ...record,
+            type: "new_record",
+            metadata,
+          }, {
+            id: record.id,
+            summary: `New record: ${record.id}`,
+            ts: moment(record.createdTime).valueOf(),
+          });
+          newRecordsCount++;
+
+        } else {
+          const ts = Date.now();
+          const id = `${record.id}-${ts}`;
+          this.$emit({
+            ...record,
+            type: "record_modified",
+            metadata,
+          }, {
+            id,
+            summary: `Record modified: ${record.id}`,
+            ts,
+          });
+          modifiedRecordsCount++;
+        }
+      }
+    }
+
+    delete params.filterByFormula;
 
     const data = await this.airtable.listRecords({
       baseId,
@@ -63,66 +101,26 @@ export default {
       params,
     });
 
-    let allRecordIds = [],
-      newRecordsCount = 0,
-      modifiedRecordsCount = 0,
-      deletedRecordsCount = 0;
-
-    if (data.records) {
-      for (const record of data.records) {
-        if (!lastTimestamp || moment(record.createdTime) > moment(lastTimestamp)) {
-          record.type = "new_record";
-          newRecordsCount++;
-        } else {
-          record.type = "record_modified";
-          modifiedRecordsCount++;
-        }
-
-        record.metadata = metadata;
-
-        this.$emit(record, {
-          summary: `${record.type}: ${JSON.stringify(record.fields)}`,
-          id: record.id,
-        });
-      }
-    }
-
-    delete params.filterByFormula;
-
-    while (allRecordIds.length === 0 || params.offset) {
-      const data = await this.airtable.listRecords({
-        baseId,
-        tableId,
-        params,
-        rateLimited: true,
-      });
-      if (!data.records.length || data.records.length === 0) return;
-      allRecordIds = [
-        ...allRecordIds,
-        ...data.records.map((record) => record.id),
-      ];
-      if (data.offset) {
-        params.offset = data.offset;
-      } else {
-        delete params.offset;
-      }
-    }
+    const allRecordIds = data.map((record) => record.id);
 
     if (prevAllRecordIds) {
-      const deletedRecordIds = prevAllRecordIds.filter(
-        (prevRecord) => !allRecordIds.includes(prevRecord),
-      );
+      const currentRecordIdSet = new Set(allRecordIds);
+      const deletedRecordIds =
+        prevAllRecordIds.filter((prevRecord) => !currentRecordIdSet.has(prevRecord));
+
       for (const recordID of deletedRecordIds) {
-        deletedRecordsCount++;
-        const deletedRecordObj = {
+        const ts = Date.now();
+        const id = `${recordID}-${ts}`;
+        this.$emit({
+          id: recordID,
           metadata,
           type: "record_deleted",
-          id: recordID,
-        };
-        this.$emit(deletedRecordObj, {
-          summary: "record_deleted",
-          id: recordID,
+        }, {
+          id,
+          summary: `Record deleted: ${recordID}`,
+          ts,
         });
+        deletedRecordsCount++;
       }
     }
 

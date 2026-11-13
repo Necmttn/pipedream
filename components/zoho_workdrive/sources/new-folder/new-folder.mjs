@@ -1,59 +1,61 @@
-import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
-import app from "../../zoho_workdrive.app.mjs";
+import { ConfigurationError } from "@pipedream/platform";
+import common from "../common/base.mjs";
+import { findMaxFolderId } from "../../common/additionalFolderProps.mjs";
 import sampleEmit from "./test-event.mjs";
 
 export default {
+  ...common,
   key: "zoho_workdrive-new-folder",
   name: "New Folder",
-  version: "0.0.2",
+  version: "0.1.2",
   description: "Emit new event when a new folder is created in a specific folder.",
   type: "source",
   dedupe: "unique",
   props: {
-    app,
-    db: "$.service.db",
-    timer: {
-      label: "Polling interval",
-      description: "Pipedream will poll the Zoho WorkDrive on this schedule",
-      type: "$.interface.timer",
-      default: {
-        intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
-      },
-    },
-    teamId: {
+    ...common.props,
+    folderType: {
       propDefinition: [
-        app,
-        "teamId",
+        common.props.app,
+        "folderType",
       ],
     },
     folderId: {
       propDefinition: [
-        app,
+        common.props.app,
         "parentId",
-        ({ teamId }) => ({
+        ({
+          teamId, folderType,
+        }) => ({
           teamId,
+          folderType,
         }),
       ],
-      label: "Folder Id",
-      description: "The unique ID of the folder.",
+      label: "Folder ID",
+      description: "The unique ID of the folder. Select a folder to view its subfolders.",
+      reloadProps: true,
     },
   },
   methods: {
-    _getLastDate() {
-      return this.db.get("lastDate") || 0;
-    },
-    _setLastDate(lastDate) {
-      this.db.set("lastDate", lastDate);
-    },
+    ...common.methods,
     async startEvent(maxResults = 0) {
-      const {
-        app,
-        folderId,
-      } = this;
+      let folderId;
+      if (this.manuallyEnterFolderId) {
+        folderId = this.typedFolderId;
+      } else {
+        const num = findMaxFolderId(this);
+        folderId = num > 0
+          ? this[`folderId${num}`]
+          : this.folderId;
+      }
 
-      const lastDate = this._getLastDate();
-      const items = app.paginate({
-        fn: app.listFiles,
+      if (!folderId) {
+        throw new ConfigurationError("Please select a Folder ID or type in a Folder ID.");
+      }
+
+      const lastDate = this._getValidatedLastDate();
+      let maxDate = lastDate;
+      const items = this.app.paginate({
+        fn: this.app.listFiles,
         maxResults,
         filter: "folder",
         sort: "created_time",
@@ -63,18 +65,23 @@ export default {
       let responseArray = [];
 
       for await (const item of items) {
-        if (new Date(item.created_time) <= new Date(lastDate)) break;
-        responseArray.push(item);
+        const createdTime = item.attributes.created_time_in_millisecond;
+        if (createdTime > lastDate) {
+          responseArray.push(item);
+          if (createdTime > maxDate) {
+            maxDate = createdTime;
+          }
+        }
       }
-      if (responseArray.length) this._setLastDate(responseArray[0].created_time);
+      this._setLastDate(maxDate);
 
       for (const item of responseArray) {
         this.$emit(
           item,
           {
             id: item.id,
-            summary: `A new folder with id: "${item.id}" was created!`,
-            ts: item.created_time,
+            summary: `A new folder with ID: "${item.id}" was created!`,
+            ts: item.attributes.created_time_in_millisecond,
           },
         );
       }
@@ -84,9 +91,6 @@ export default {
     async deploy() {
       await this.startEvent(25);
     },
-  },
-  async run() {
-    await this.startEvent();
   },
   sampleEmit,
 };

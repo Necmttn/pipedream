@@ -6,11 +6,17 @@ export default {
   type: "app",
   app: "akeneo",
   propDefinitions: {
+    page: {
+      type: "integer",
+      label: "Page",
+      description: "The page of results to retrieve, zero-based.",
+      min: 0,
+      default: 0,
+    },
     productId: {
       type: "string",
       label: "Product Identifier",
       description: "An ID identifying the product - either this prop or `Product Model Code` should be set.",
-      optional: true,
       async options({ page }) {
         page++;
         const resp = await this.getProducts({
@@ -51,7 +57,7 @@ export default {
           params: {
             limit: PAGE_SIZE,
             page,
-            search: {
+            search: JSON.stringify({
               type: [
                 {
                   operator: "IN",
@@ -60,7 +66,7 @@ export default {
                   ],
                 },
               ],
-            },
+            }),
           },
         });
         return resp?._embedded?.items?.map((attribute) => attribute.code) || [];
@@ -92,6 +98,64 @@ export default {
         return resp?.locale || [];
       },
     },
+    locale: {
+      type: "string",
+      label: "Locale",
+      description: "A code identifying the locale",
+      async options() {
+        const { _embedded: { items } } = await this.getLocales({
+          params: {
+            search: JSON.stringify({
+              enabled: [
+                {
+                  operator: "=",
+                  value: true,
+                },
+              ],
+            }),
+          },
+        });
+        return items.map((locale) => locale.code);
+      },
+    },
+    attribute: {
+      type: "string",
+      label: "Attribute",
+      description: "A code identifying the attribute",
+      async options({ page }) {
+        const { _embedded: { items } } = await this.getAttributes({
+          params: {
+            limit: PAGE_SIZE,
+            page: page + 1,
+          },
+        });
+        return items.map((attribute) => attribute.code);
+      },
+    },
+    withAttributeOptions: {
+      type: "boolean",
+      label: "With Attribute Options",
+      description: "Return labels of attribute options in the response. See [the`linked_data` format](https://api.akeneo.com/concepts/products.html#the-linked_data-format) section for more details.",
+      optional: true,
+    },
+    withAssetShareLinks: {
+      type: "boolean",
+      label: "With Asset Share Links",
+      description: "Return asset collection share link urls in the response. See [the `linked_data` format](https://api.akeneo.com/concepts/products.html#the-linked_data-format) section for more details.",
+      optional: true,
+    },
+    withQualityScores: {
+      type: "boolean",
+      label: "With Quality Scores",
+      description: "Return product quality scores in the response",
+      optional: true,
+    },
+    withCompletenesses: {
+      type: "boolean",
+      label: "With Completeness",
+      description: "Return product completenesses in the response",
+      optional: true,
+    },
   },
   methods: {
     _getUrl(path) {
@@ -115,6 +179,28 @@ export default {
         ...otherConfig,
       };
       return axios($, config);
+    },
+    async getProduct({
+      productId, ...args
+    }) {
+      return this._makeRequest({
+        path: `/products/${productId}`,
+        ...args,
+      });
+    },
+    async getLocales(args = {}) {
+      return this._makeRequest({
+        path: "/locales",
+        ...args,
+      });
+    },
+    getProductDraft({
+      productId, ...opts
+    }) {
+      return this._makeRequest({
+        path: `/products/${productId}/draft`,
+        ...opts,
+      });
     },
     async getProducts(args = {}) {
       return this._makeRequest({
@@ -161,6 +247,24 @@ export default {
       return this._makeRequest({
         method: "POST",
         path: "/media-files",
+        ...args,
+      });
+    },
+    async deleteProduct({
+      productId, ...args
+    }) {
+      return this._makeRequest({
+        method: "DELETE",
+        path: `/products/${productId}`,
+        ...args,
+      });
+    },
+    async submitDraft({
+      productId, ...args
+    }) {
+      return this._makeRequest({
+        method: "POST",
+        path: `/products/${productId}/proposal`,
         ...args,
       });
     },

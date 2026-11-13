@@ -1,26 +1,23 @@
 import common from "../common/common.mjs";
-import app from "../../clickup.app.mjs";
 import constants from "../common/constants.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "clickup-updated-task",
   name: "New Updated Task (Instant)",
   description: "Emit new event when a new task is updated",
-  version: "0.0.8",
+  version: "0.0.13",
   dedupe: "unique",
   type: "source",
   props: {
     ...common.props,
-    listId: {
-      description: "If a list is selected, only tasks updated in this list will emit an event",
-      optional: true,
-      reloadProps: true,
+    spaceId: {
       propDefinition: [
-        app,
-        "lists",
-        ({ workspaceId }) => ({
-          workspaceId,
+        common.props.app,
+        "spaces",
+        (c) => ({
+          workspaceId: c.workspaceId,
         }),
       ],
     },
@@ -31,18 +28,39 @@ export default {
       options: constants.TASK_FIELDS,
       optional: true,
     },
+    folderId: {
+      propDefinition: [
+        common.props.app,
+        "folderId",
+        (c) => ({
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    listId: {
+      propDefinition: [
+        common.props.app,
+        "listId",
+        (c) => ({
+          folderId: c.folderId,
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
     customFieldIds: {
+      propDefinition: [
+        common.props.app,
+        "customFieldId",
+        (c) => ({
+          listId: c.listId,
+        }),
+      ],
       label: "Custom Fields",
       type: "string[]",
       description: "Select a custom field to filter",
       optional: true,
-      propDefinition: [
-        app,
-        "customFields",
-        ({ listId }) => ({
-          listId,
-        }),
-      ],
     },
   },
   methods: {
@@ -93,6 +111,6 @@ export default {
     if (isValidated) {
       this.$emit(body, this._getMeta(body.history_items));
     }
-
   },
+  sampleEmit,
 };

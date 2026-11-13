@@ -3,8 +3,10 @@ import {
   axios,
   ConfigurationError,
 } from "@pipedream/platform";
+import { JWT } from "google-auth-library";
 import { convert } from "html-to-text";
-import mime from "mime";
+import mime from "mime/types/standard.js";
+import addressparser from "nodemailer/lib/addressparser/index.js";
 import MailComposer from "nodemailer/lib/mail-composer/index.js";
 import constants from "./common/constants.mjs";
 
@@ -15,12 +17,17 @@ export default {
     message: {
       type: "string",
       label: "Message",
-      async options({ prevContext }) {
+      description: "The identifier of a message",
+      useQuery: true,
+      async options({
+        prevContext, query,
+      }) {
         const {
           messages,
           nextPageToken,
         } = await this.listMessages({
           pageToken: prevContext?.nextPageToken,
+          q: query,
         });
 
         const options = await Promise.all(messages.map(async (message) => {
@@ -41,7 +48,41 @@ export default {
         };
       },
     },
-
+    messageWithAttachments: {
+      type: "string",
+      label: "Message",
+      description: "The identifier of a message",
+      useQuery: true,
+      async options({
+        prevContext, query,
+      }) {
+        const {
+          messages,
+          nextPageToken,
+        } = await this.listMessages({
+          pageToken: prevContext?.nextPageToken,
+          q: query,
+        });
+        const options = await Promise.all(messages.map(async (message) => {
+          const { payload } = await this.getMessage({
+            id: message.id,
+          });
+          const { value: subject } = payload.headers.find(({ name }) => name === "Subject");
+          const hasAttachments = payload?.parts?.filter(({ body }) => body.attachmentId );
+          return {
+            label: subject,
+            value: message.id,
+            hasAttachments: !!hasAttachments?.length,
+          };
+        }));
+        return {
+          options: options?.filter(({ hasAttachments }) => hasAttachments) || [],
+          context: {
+            nextPageToken,
+          },
+        };
+      },
+    },
     label: {
       type: "string",
       label: "Label",
@@ -54,10 +95,31 @@ export default {
         }));
       },
     },
+    messageLabels: {
+      type: "string[]",
+      label: "Message Labels",
+      description: "Labels are used to categorize messages and threads within the user's mailbox",
+      async options({
+        messageId, type = "add",
+      }) {
+        const { labels } = await this.listLabels();
+        const { labelIds } = await this.getMessage({
+          id: messageId,
+        });
+        return labels
+          .filter(({ id }) => type === "add"
+            ? !labelIds.includes(id)
+            : labelIds.includes(id))
+          .map((label) => ({
+            label: label.name,
+            value: label.id,
+          }));
+      },
+    },
     signature: {
       type: "string",
       label: "Signature",
-      description: "An HTML signature composed in the Gmail Web UI that will be included in the message",
+      description: "An HTML signature composed in the Gmail Web UI that will be included in the message. Only works with the `HTML` body type.",
       optional: true,
       async options() {
         const { sendAs } = await this.listSignatures();
@@ -80,6 +142,54 @@ export default {
           return delegates.map(({ delegateEmail }) => delegateEmail);
         } catch (e) {
           throw new ConfigurationError(e);
+        }
+      },
+    },
+    attachmentId: {
+      type: "string",
+      label: "Attachment",
+      description: "Identifier of the attachment to download",
+      async options({ messageId }) {
+        try {
+          const { payload: { parts } } = await this.getMessage({
+            id: messageId,
+          });
+          return parts?.filter(({ body }) => body.attachmentId )
+            ?.map(({
+              body, filename,
+            }) => ({
+              value: body.attachmentId,
+              label: filename,
+            })) || [];
+        } catch {
+          return [];
+        }
+      },
+    },
+    threadId: {
+      type: "string",
+      label: "Thread ID",
+      description: "Identifier of the thread to list messages from",
+      async options({ prevContext }) {
+        try {
+          const {
+            threads, nextPageToken,
+          } = await this.listThreads({
+            pageToken: prevContext?.nextPageToken,
+          });
+          return {
+            options: threads.map(({
+              id: value, snippet: label,
+            }) => ({
+              value,
+              label,
+            })),
+            context: {
+              nextPageToken,
+            },
+          };
+        } catch {
+          return [];
         }
       },
     },
@@ -113,6 +223,18 @@ export default {
       description: "Specify the name that will be displayed in the \"From\" section of the email.",
       optional: true,
     },
+    fromEmail: {
+      type: "string",
+      label: "From Email",
+      description: "Specify the email address that will be displayed in the \"From\" section of the email.",
+      optional: true,
+      async options() {
+        const { sendAs } = await this.listSignatures();
+        return sendAs
+          .filter(({ sendAsEmail }) => sendAsEmail)
+          .map(({ sendAsEmail }) => sendAsEmail);
+      },
+    },
     replyTo: {
       type: "string",
       label: "Reply To",
@@ -125,7 +247,7 @@ export default {
       description: "Specify a subject for the email.",
     },
     body: {
-      type: "any",
+      type: "string",
       label: "Email Body",
       description: "Include an email body as either plain text or HTML. If HTML, make sure to set the \"Body Type\" prop to `html`.",
     },
@@ -137,17 +259,31 @@ export default {
       default: "plaintext",
       options: Object.values(constants.BODY_TYPES),
     },
-    attachments: {
-      type: "object",
-      label: "Attachments",
-      description: "Add any attachments you'd like to include as objects. The `key` should be the **filename** and the `value` should be the **url** for the attachment. The **filename** must contain the file extension (i.e. `.jpeg`, `.txt`) and the **url** is the download link for the file.",
+    attachmentFilenames: {
+      type: "string[]",
+      label: "Attachment Filenames",
+      description: "Filenames for each attached file (include the extension, e.g. `report.pdf`, `dna.txt`). Must be the same length as `attachments` — index `i` in this list pairs with index `i` in `attachments`.",
       optional: true,
     },
-    inReplyTo: {
-      type: "string",
-      label: "In Reply To",
-      description: "Specify the `message-id` this email is replying to. Must be from the first message sent in the thread. To use this prop with `async options` please use `Gmail (Developer App)` `Send Email` component.",
+    attachments: {
+      type: "string[]",
+      label: "Attachments",
+      description: "Files to attach. Each entry is either a public URL or a path under `/tmp` (e.g. `/tmp/dna.txt`). Must be the same length as `attachmentFilenames` — index `i` here pairs with index `i` there.",
+      format: "file-ref",
       optional: true,
+    },
+    inReplyToMessageId: {
+      type: "string",
+      label: "In Reply To Message ID",
+      description: "To send this email as a reply, pass the `id` of any message in the target thread (from **Find Emails** or **Get Thread**). The action will preserve `References`/`In-Reply-To` headers, thread correctly, and auto-prefix `Re:` on the subject.",
+      optional: true,
+    },
+    replyAll: {
+      type: "boolean",
+      label: "Reply All",
+      description: "When `inReplyToMessageId` is set, fan-out recipients to the original `From`/`To`/`Cc` (minus the user's own address). Ignored when `inReplyToMessageId` is blank.",
+      optional: true,
+      default: false,
     },
     mimeType: {
       type: "string",
@@ -155,31 +291,56 @@ export default {
       description: "Mime Type of attachments. Setting the mime-type will override using the filename extension to determine attachment's content type.",
       optional: true,
       options() {
-        return Object.values(mime._types);
+        return Object.keys(mime);
       },
     },
   },
   methods: {
+    getToken() {
+      return this.$auth.oauth_access_token;
+    },
     _client() {
       const auth = new gmail.auth.OAuth2();
       auth.setCredentials({
-        access_token: this.$auth.oauth_access_token,
+        access_token: this.getToken(),
       });
       return gmail.gmail({
         version: "v1",
         auth,
       });
     },
-    async getOptionsToSendEmail($, props) {
+    /**
+     * Parse email addresses from a string
+     * @param {string} addressString - Raw address string to parse
+     * @returns {string[]} Array of properly formatted email addresses
+     */
+    parseEmailAddresses(addressString) {
+      if (!addressString || typeof addressString !== "string") {
+        return [];
+      }
+
+      // Use nodemailer's addressparser to properly handle RFC 5322 format
+      const parsed = addressparser(addressString.trim());
+
+      // Reconstruct addresses in standard format
+      return parsed.map((addr) => {
+        if (addr.name) {
+          return `${addr.name} <${addr.address}>`;
+        }
+        return addr.address;
+      });
+    },
+    async getOptionsToSendEmail(props) {
       const {
         name: fromName,
         email,
       } = await this.userInfo();
+      const fromEmail = props.fromEmail || email;
 
       const opts = {
         from: props.fromName
-          ? `${props.fromName} <${email}>`
-          : `${fromName} <${email}>`,
+          ? `${props.fromName} <${fromEmail}>`
+          : `${fromName} <${fromEmail}>`,
         to: props.to,
         cc: props.cc,
         bcc: props.bcc,
@@ -187,10 +348,11 @@ export default {
         subject: props.subject,
       };
 
-      if (props.inReplyTo) {
+      const inReplyToMessageId = props.inReplyToMessageId ?? props.inReplyTo;
+      if (inReplyToMessageId) {
         try {
           const repliedMessage = await this.getMessage({
-            id: props.inReplyTo,
+            id: inReplyToMessageId,
           });
           const { value: subject } = repliedMessage.payload.headers.find(({ name }) => name === "Subject");
           //sometimes coming as 'Message-ID' and sometimes 'Message-Id'
@@ -199,23 +361,89 @@ export default {
           opts.inReplyTo = inReplyTo;
           opts.references = inReplyTo;
           opts.threadId = repliedMessage.threadId;
+          // Treats a present-but-blank header as absent: `??` alone would accept an
+          // empty `Reply-To`, leaving originalSender = "" and the recipient fallback
+          // below dead — which is the HTTP 400 "Recipient address required" this whole
+          // block exists to prevent.
+          const header = (name) => {
+            const value = repliedMessage.payload.headers
+              .find((h) => h.name.toLowerCase() === name)?.value;
+            return value?.trim()
+              ? value
+              : undefined;
+          };
+          const originalSender = header("reply-to") ?? header("from");
+
+          if (props.replyAll) {
+            const cc = header("cc");
+            const bcc = header("bcc");
+            opts.to = [
+              ...this.parseEmailAddresses(header("from") ?? ""),
+              ...this.parseEmailAddresses(header("to") ?? ""),
+            ];
+
+            // Filter out the current user's email address
+            const currentUserEmail = email.toLowerCase().trim();
+            const withoutSelf = (addresses) => addresses.filter((addr) => {
+              // Extract email from possible format like "Name <email@example.com>"
+              const match = addr.match(/<(.+?)>/) || [
+                null,
+                addr.trim(),
+              ];
+              return match[1].toLowerCase() !== currentUserEmail;
+            });
+
+            opts.to = [
+              ...new Set(withoutSelf(opts.to)),
+            ];
+            if (cc) {
+              // Same self-filter as `to`: replying-all to a thread the user was Cc'd on
+              // would otherwise Cc them on their own reply.
+              opts.cc = [
+                ...new Set(withoutSelf(this.parseEmailAddresses(cc))),
+              ];
+            }
+            if (bcc) {
+              opts.bcc = this.parseEmailAddresses(bcc);
+            }
+            // Replying to a thread the user is the only participant in (a note to
+            // self) filters the recipient list down to nothing. Fall back to the
+            // original sender rather than sending with no recipient.
+            if (!opts.to.length && originalSender) {
+              opts.to = this.parseEmailAddresses(originalSender);
+            }
+          } else if (!opts.to?.length && originalSender) {
+            // Plain reply with no explicit `to`: address the original sender, which
+            // is what the tool descriptions promise. Without this the message is
+            // built with no recipient and the API rejects it with
+            // "Recipient address required" (HTTP 400).
+            opts.to = this.parseEmailAddresses(originalSender);
+          }
         } catch (err) {
-          opts.threadId = props.inReplyTo;
+          const status = err?.status ?? err?.code ?? err?.response?.status;
+          if (status !== 404) {
+            throw err;
+          }
+          opts.threadId = inReplyToMessageId;
         }
       }
 
-      if (props.attachments) {
-        opts.attachments = Object.entries(props.attachments)
-          .map(([
-            filename,
-            path,
-          ]) => ({
-            filename,
-            path,
-          }));
+      const attachments = props.attachments ?? props.attachmentUrlsOrPaths;
+      if (props.attachmentFilenames?.length && attachments?.length) {
+        opts.attachments = [];
+        for (let i = 0; i < props.attachmentFilenames.length; i++) {
+          opts.attachments.push({
+            filename: props.attachmentFilenames[i],
+            path: attachments[i],
+          });
+        }
       }
 
       if (props.bodyType === constants.BODY_TYPES.HTML) {
+        if (props.signature) {
+          props.body += props.signature;
+        }
+
         opts.html = props.body;
       } else {
         opts.text = props.body;
@@ -246,11 +474,20 @@ export default {
       });
       return data;
     },
-    async getMessage({ id }) {
-      const { data } = await this._client().users.messages.get({
+    async getMessage({
+      id, format, metadataHeaders,
+    }) {
+      const fn = () => this._client().users.messages.get({
         userId: constants.USER_ID,
         id,
+        ...(format && {
+          format,
+        }),
+        ...(metadataHeaders && {
+          metadataHeaders,
+        }),
       });
+      const { data } = await this.retryWithExponentialBackoff(fn);
       return data;
     },
     async listHistory(opts = {}) {
@@ -260,6 +497,47 @@ export default {
       });
       return data;
     },
+    async listThreads(opts = {}) {
+      const { data } = await this._client().users.threads.list({
+        userId: constants.USER_ID,
+        ...opts,
+      });
+      return data;
+    },
+    async getThread({
+      threadId, format,
+    }) {
+      const { data } = await this._client().users.threads.get({
+        userId: constants.USER_ID,
+        id: threadId,
+        ...(format && {
+          format,
+        }),
+      });
+      return data;
+    },
+    async getProfile() {
+      const { data } = await this._client().users.getProfile({
+        userId: constants.USER_ID,
+      });
+      return data;
+    },
+    /**
+     * Resolve the literal string "me" to the authenticated user's email
+     * address inside a list of recipient addresses. Any other address passes
+     * through unchanged. Gmail's API accepts "me" only as the `userId` path
+     * param — never as a recipient — so callers that want a self-addressing
+     * shortcut must expand it before sending.
+     */
+    async resolveMe(addresses) {
+      if (!addresses?.length || !addresses.includes("me")) {
+        return addresses;
+      }
+      const { emailAddress } = await this.getProfile();
+      return addresses.map((a) => (a === "me"
+        ? emailAddress
+        : a));
+    },
     async getMessageSubject({ id }) {
       const message = await this.getMessage({
         id,
@@ -267,11 +545,14 @@ export default {
       const { value: subject } = message.payload.headers.find(({ name }) => name === "Subject");
       return subject;
     },
-    async getMessages(ids = []) {
-      const promises = ids.map((id) => this.getMessage({
-        id,
-      }));
-      return Promise.all(promises);
+    async *getAllMessages(ids = [], opts = {}) {
+      for (const id of ids) {
+        const message = await this.getMessage({
+          id,
+          ...opts,
+        });
+        yield message;
+      }
     },
     async listSignatures() {
       const { data } = await this._client().users.settings.sendAs.list({
@@ -288,6 +569,31 @@ export default {
         ? 1
         : -1);
       return data;
+    },
+    async deleteLabel(labelId) {
+      return this._client().users.labels.delete({
+        userId: constants.USER_ID,
+        id: labelId,
+      });
+    },
+    async createFilter(requestBody) {
+      const { data } = await this._client().users.settings.filters.create({
+        userId: constants.USER_ID,
+        requestBody,
+      });
+      return data;
+    },
+    async listFilters() {
+      const { data } = await this._client().users.settings.filters.list({
+        userId: constants.USER_ID,
+      });
+      return data;
+    },
+    async deleteFilter(filterId) {
+      return this._client().users.settings.filters.delete({
+        userId: constants.USER_ID,
+        id: filterId,
+      });
     },
     async listDelegates() {
       const { data } = await this._client().users.settings.delegates.list({
@@ -333,16 +639,15 @@ export default {
         }
       }
     },
-    async addLabelToEmail({
-      message, label,
+    async updateLabels({
+      message, addLabelIds = [], removeLabelIds = [],
     }) {
       const response = await this._client().users.messages.modify({
         userId: constants.USER_ID,
         id: message,
         requestBody: {
-          addLabelIds: [
-            label,
-          ],
+          addLabelIds,
+          removeLabelIds,
         },
       });
       return response.data;
@@ -352,9 +657,9 @@ export default {
         threadId,
         ...options
       } = opts;
-      const mail = new MailComposer(options);
+      const mail = new MailComposer(options).compile();
       mail.keepBcc = true;
-      const message = await mail.compile().build();
+      const message = await mail.build();
       try {
         const response = await this._client().users.drafts.create({
           userId: constants.USER_ID,
@@ -373,6 +678,61 @@ export default {
           throw err;
         }
       }
+    },
+    _serviceAccountAuth(credentials, impersonatedUser) {
+      const scopes = [
+        "https://www.googleapis.com/auth/gmail.settings.basic",
+      ];
+      return new JWT({
+        email: credentials.client_email,
+        key: credentials.private_key,
+        scopes,
+        subject: impersonatedUser,
+      });
+    },
+    async updateSignature({
+      signature, email, credentials,
+    }) {
+      const opts = {
+        userId: "me",
+        sendAsEmail: email,
+        requestBody: {
+          signature,
+        },
+      };
+      if (credentials) opts.auth = this._serviceAccountAuth(credentials, email);
+      return this._client().users.settings.sendAs.patch(opts);
+    },
+    async getAttachment({
+      messageId, attachmentId,
+    }) {
+      const { data } = await this._client().users.messages.attachments.get({
+        userId: "me",
+        messageId,
+        id: attachmentId,
+      });
+      return data;
+    },
+    retryWithExponentialBackoff(func, maxAttempts = 3, baseDelayS = 2) {
+      let attempt = 0;
+
+      const execute = async () => {
+        try {
+          return await func();
+        } catch (error) {
+          if (attempt >= maxAttempts) {
+            throw error;
+          }
+
+          const delayMs = Math.pow(baseDelayS, attempt) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+          attempt++;
+          return execute();
+        }
+      };
+
+      return execute();
     },
   },
 };

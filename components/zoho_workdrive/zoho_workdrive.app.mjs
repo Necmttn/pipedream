@@ -7,7 +7,7 @@ export default {
   propDefinitions: {
     teamId: {
       type: "string",
-      label: "Team Id",
+      label: "Team ID",
       description: "The unique ID that represents a team.",
       async options() {
         const { data: { id: userId } } = await this.getUser();
@@ -25,16 +25,29 @@ export default {
     },
     parentId: {
       type: "string",
-      label: "Parent Id",
-      description: "The unique ID of the folder where files are to be uploaded.",
+      label: "Parent ID",
+      description: "The unique ID of the folder where files are to be uploaded. Select a folder to view its subfolders.",
       async options({
-        page, teamId,
+        page, teamId, folderType, includeSubfolders = false,
       }) {
         return await this.listRootFolders({
+          folderType,
           teamId,
           limit: LIMIT,
           offset: LIMIT * page,
+          includeSubfolders,
         });
+      },
+    },
+    folderType: {
+      type: "string",
+      label: "Folder Type",
+      description: "Whether to retrieve team folders or privatespace folders",
+      async options() {
+        return [
+          "My Folders",
+          "Team Folders",
+        ];
       },
     },
   },
@@ -94,7 +107,7 @@ export default {
       });
     },
     async listRootFolders({
-      teamId, limit, offset, params = {}, ...args
+      teamId, folderType, limit, offset, params = {}, includeSubfolders = true, ...args
     }) {
       const { data: { id: teamCurrentUserId } } = await this.getTeamCurrentUser({
         teamId,
@@ -112,7 +125,9 @@ export default {
       params["sort"] = "name";
       const reponseArray = [];
       const { data: rootFolders } = await this._makeRequest({
-        path: `privatespace/${privateSpaceId}/folders`,
+        path: folderType === "Team Folders"
+          ? `/teams/${teamId}/teamfolders`
+          : `privatespace/${privateSpaceId}/folders`,
         params: new URLSearchParams(params).toString(),
         ...args,
       });
@@ -124,11 +139,13 @@ export default {
           value: id,
           label: attributes.name,
         });
-        const subFolders = await this.paginateFolders({
-          folderId: id,
-          prefix: "- ",
-        });
-        reponseArray.push(...subFolders);
+        if (includeSubfolders) {
+          const subFolders = await this.paginateFolders({
+            folderId: id,
+            prefix: "- ",
+          });
+          reponseArray.push(...subFolders);
+        }
       }
       return reponseArray;
     },
@@ -144,6 +161,15 @@ export default {
       return this._makeRequest({
         method: "POST",
         path: "upload",
+        ...args,
+      });
+    },
+    downloadFile({
+      fileId, ...args
+    }) {
+      return this._makeRequest({
+        url: `https://download.${this.$auth.base_api_uri}/v1/workdrive/download/${fileId}`,
+        responseType: "arraybuffer",
         ...args,
       });
     },

@@ -2,6 +2,7 @@ import { pipeline } from "stream/promises";
 import fs from "fs";
 import common from "../../common/common-s3.mjs";
 import { toSingleLineString } from "../../common/utils.mjs";
+import "@aws-sdk/signature-v4-crt";
 
 export default {
   ...common,
@@ -9,9 +10,14 @@ export default {
   name: "S3 - Download File to /tmp",
   description: toSingleLineString(`
     Downloads a file from S3 to the /tmp directory.
-    [See the docs](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
+    [See the documentation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
   `),
-  version: "0.0.1",
+  version: "0.0.6",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     aws: common.props.aws,
@@ -33,6 +39,11 @@ export default {
       type: "string",
       label: "File Path",
       description: "The path to the file you'd like to download eg. `/tmp/file.txt`",
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   async run({ $ }) {

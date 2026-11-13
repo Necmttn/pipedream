@@ -6,7 +6,12 @@ export default {
   name: "Text To Speech",
   description: "Convert text to voice audio with Astica AI [See the documentation](https://astica.ai/voice/documentation/)",
   key: "astica_ai-text-to-speech",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     asticaAi,
@@ -36,6 +41,11 @@ export default {
         return constants.VOICES[this.language];
       },
       optional: true,
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "write",
+      sync: true,
     },
   },
   async run({ $ }) {

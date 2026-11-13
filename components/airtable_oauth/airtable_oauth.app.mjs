@@ -1,5 +1,4 @@
-import { ConfigurationError } from "@pipedream/platform";
-import { fieldTypeToPropType } from "./common/utils.mjs";
+import Airtable from "airtable";
 import { axios } from "@pipedream/platform";
 import { SORT_DIRECTION_OPTIONS } from "./common/constants.mjs";
 import isEmpty from "lodash.isempty";
@@ -17,189 +16,49 @@ export default {
     baseId: {
       type: "string",
       label: "Base",
-      description: "The base ID",
-      async options({ prevContext }) {
-        const params = {};
-        if (prevContext?.newOffset) {
-          params.offset = prevContext.newOffset;
-        }
-        const {
-          bases, offset,
-        } = await this.listBases({
-          params,
-        });
-        const options = (bases ?? []).map((base) => ({
-          label: base.name || base.id,
-          value: base.id,
-        }));
-        return {
-          options,
-          context: {
-            newOffset: offset,
-          },
-        };
-      },
+      description: "The ID of the base to use, e.g. `appXXXXXXXXXXXXXX`. Use **List Bases** to look one up.",
     },
     tableId: {
       type: "string",
       label: "Table",
-      description: "The table ID. If referencing a **Base** dynamically using data from another step (e.g., `{{steps.trigger.event.metadata.baseId}}`), you will not be able to select from the list of Tables, and automatic table options will not work when configuring this step. Please enter a custom expression to specify the **Table**.",
-      async options({ baseId }) {
-        let tables;
-        try {
-          tables  = (await this.listTables({
-            baseId,
-          })).tables;
-        } catch (err) {
-          throw new ConfigurationError(`Could not find tables for base ID "${baseId}"`);
-        }
-        return (tables ?? []).map((table) => ({
-          label: table.name || table.id,
-          value: table.id,
-        }));
-      },
+      description: "The ID of the table to use, e.g. `tblXXXXXXXXXXXXXX`. Use **List Tables** to look one up.",
     },
     viewId: {
       type: "string",
       label: "View",
-      description: "The view ID. If referencing a **Table** dynamically using data from another step (e.g., `{{steps.trigger.event.metadata.tableId}}`), you will not be able to select from the list of Views for this step. Please enter a custom expression to specify the **View**.",
-      async options({
-        baseId, tableId,
-      }) {
-        let views;
-        try {
-          const { tables } = await this.listTables({
-            baseId,
-          });
-          const table = tables.find(({ id }) => id === tableId);
-          views = table.views;
-        } catch (err) {
-          throw new ConfigurationError(`Could not find views for base ID "${baseId}"`);
-        }
-        return (views ?? []).map((view) => ({
-          label: view.name || view.id,
-          value: view.id,
-        }));
-      },
+      description: "The ID of the view to use, e.g. `viwXXXXXXXXXXXXXX`. Use **List Tables** to look up a table's views.",
     },
     sortFieldId: {
       type: "string",
-      label: "Sort: Field",
-      description: "Optionally select a field to sort results. To sort by multiple fields, use the **Filter by Forumla** field. If referencing a **Table** dynamically using data from another step (e.g., `{{steps.mydata.$return_value}}`), automatic field options won't work when configuring this step. Please enter a custom expression to specify the **Sort: Field**.",
+      label: "Sort by Field",
+      description: "Optionally provide a field ID to sort results by, e.g. `fldXXXXXXXXXXXXXX`. Use **List Tables** to look up a table's field IDs. To sort by multiple fields, use `Filter by Formula` instead.",
       optional: true,
-      async options({
-        baseId, tableId,
-      }) {
-        let fields;
-        try {
-          const { tables } = await this.listTables({
-            baseId,
-          });
-          const table = tables.find(({ id }) => id === tableId);
-          fields = table.fields;
-        } catch (err) {
-          throw new ConfigurationError(`Could not find fields for table ID "${tableId}"`);
-        }
-        return (fields ?? []).map((field) => ({
-          label: field.name || field.id,
-          value: field.id,
-        }));
-      },
     },
     fieldName: {
       type: "string",
       label: "Search Field",
-      description: "The field to match against the search value",
-      async options({
-        baseId, tableId, fieldType,
-      }) {
-        let fields;
-        try {
-          const { tables } = await this.listTables({
-            baseId,
-          });
-          const table = tables.find(({ id }) => id === tableId);
-          fields = table.fields;
-          if (fieldType) {
-            fields = fields.filter(({ type }) => fieldTypeToPropType(type) === fieldType);
-          }
-        } catch (err) {
-          throw new ConfigurationError(`Could not find fields for table ID "${tableId}"`);
-        }
-        return (fields ?? []).map((field) => field.name);
-      },
+      description: "The name of the field to match against the search value, e.g. `Status`. Use the **List Tables** action to look up a table's field names.",
     },
     recordId: {
       type: "string",
       label: "Record ID",
-      description: "Identifier of a record",
-      async options({
-        baseId, tableId, prevContext,
-      }) {
-        const params = {};
-        if (prevContext?.newOffset) {
-          params.offset = prevContext.newOffset;
-        }
-        const {
-          records, offset,
-        } = await this.listRecords({
-          baseId,
-          tableId,
-          params,
-        });
-        const options = (records ?? []).map((record) => ({
-          label: record.fields?.Name || record.id,
-          value: record.id,
-        }));
-        return {
-          options,
-          context: {
-            newOffset: offset,
-          },
-        };
-      },
+      description: "The ID of the record to operate on. IDs always start with `rec`, e.g. `recAbC123XyZ456`. Use **List Records** to look one up.",
     },
     commentId: {
       type: "string",
       label: "Comment ID",
-      description: "Identifier of a comment",
-      async options({
-        baseId, tableId, recordId, prevContext,
-      }) {
-        const params = {};
-        if (prevContext?.newOffset) {
-          params.offset = prevContext.newOffset;
-        }
-        const {
-          comments, offset,
-        } = await this.listComments({
-          baseId,
-          tableId,
-          recordId,
-          params,
-        });
-        const options = (comments ?? []).map((comment) => ({
-          label: comment.text,
-          value: comment.id,
-        }));
-        return {
-          options,
-          context: {
-            newOffset: offset,
-          },
-        };
-      },
+      description: "The ID of the comment to operate on. Use **List Comments** to look one up, or use the ID returned in the response of **Create Comment**.",
     },
     returnFieldsByFieldId: {
       type: "boolean",
-      label: "Return Fields By Field ID",
-      description: "An optional boolean value that lets you return field objects where the key is the field id. This defaults to `false`, which returns field objects where the key is the field name.",
+      label: "Return Fields By ID",
+      description: "If set to `true`, the returned field objects will have the field ID as the key, instead of the field name.",
       optional: true,
     },
     sortDirection: {
       type: "string",
       label: "Sort: Direction",
-      description: "This field will be ignored if you don't select a field to sort by.",
+      description: "If sorting by a field, which direction to sort by.",
       options: SORT_DIRECTION_OPTIONS,
       default: "desc",
       optional: true,
@@ -207,33 +66,45 @@ export default {
     maxRecords: {
       type: "integer",
       label: "Max Records",
-      description: "Optionally limit the maximum number of records to return. Leave blank to retrieve all records.",
+      description: "The maximum number of records to return. Leave blank to retrieve all records.",
       optional: true,
     },
     filterByFormula: {
       type: "string",
       label: "Filter by Formula",
-      description: "Optionally provide a [formula](https://support.airtable.com/hc/en-us/articles/203255215-Formula-Field-Reference) used to filter records. The formula will be evaluated for each record, and if the result is not `0`, `false`, `\"\"`, `NaN`, `[]`, or `#Error!` the record will be included in the response. For example, to only include records where `Name` isn't empty, pass `NOT({Name} = '')`.",
+      description: "Optionally provide a [formula (see info on the documentation)](https://support.airtable.com/hc/en-us/articles/203255215-Formula-Field-Reference) used to filter records. The formula will be evaluated for each record, and if the result is not `0`, `false`, `\"\"`, `NaN`, `[]`, or `#Error!` the record will be included in the response. For example, to only include records where `Name` isn't empty, use `NOT({Name} = '')`.",
       optional: true,
     },
     records: {
-      type: "string",
+      type: "string[]",
       label: "Records",
-      description: "Provide an array of objects. Each object should represent a new record with the column name as the key and the data to insert as the corresponding value (e.g., passing `[{\"foo\":\"bar\",\"id\":123},{\"foo\":\"baz\",\"id\":456}]` will create two records and with values added to the fields `foo` and `id`). The most common pattern is to reference an array of objects exported by a previous step (e.g., `{{steps.foo.$return_value}}`). You may also enter or construct a string that will `JSON.parse()` to an array of objects.",
+      description: "Each item in the array should be an object in JSON format, representing a new record. The keys are the column names and the corresponding values are the data to insert.",
     },
     typecast: {
       type: "boolean",
       label: "Typecast",
-      description: "The Airtable API will perform best-effort automatic data conversion from string values if the typecast parameter is `True`. Automatic conversion is disabled by default to ensure data integrity, but it may be helpful for integrating with 3rd party data sources.",
+      description: "The Airtable API will perform best-effort automatic data conversion from string values if the typecast parameter is `True`. This is disabled by default to ensure data integrity, but it may be helpful for integrating with 3rd party data sources.",
       optional: true,
     },
     record: {
       type: "object",
       label: "Record",
-      description: "Enter the column name for the key and the corresponding column value. You can include all, some, or none of the field values. You may also pass a JSON object as a custom expression with key/value pairs representing columns and values (e.g., `{{ {\"foo\":\"bar\",\"id\":123} }}`). A common pattern is to reference an object exported by a previous step (e.g., `{{steps.foo.$return_value}}`).",
+      description: "An object keyed by Airtable field name, where each value is the data to write to that field, e.g. `{ \"Name\": \"Acme\", \"Stage\": \"Won\" }`. Include at least one writable field, and any number of the table's other fields. Use **List Tables** to look up a table's field names and types. Computed fields (formula, rollup, count, autonumber, created time, created by, last modified time and last modified by) cannot be written to. Enable `Typecast` when supplying human-readable values such as select option names or date strings. You may also use a custom expression.",
+    },
+    customExpressionInfo: {
+      type: "alert",
+      alertType: "info",
+      content: `A custom expression can be a JSON object with key/value pairs representing columns and values, e.g. \`{{ { "foo": "bar", "id": 123 } }}\`.
+\\
+You can also reference an object exported by a previous step, e.g. \`{{steps.foo.$return_value}}\`.`,
     },
   },
   methods: {
+    base(baseId) {
+      return new Airtable({
+        apiKey: this.$auth.oauth_access_token,
+      }).base(baseId);
+    },
     _baseUrl() {
       return "https://api.airtable.com/v0";
     },
@@ -258,11 +129,15 @@ export default {
         : axios($, config);
     },
     getRecord({
-      baseId, tableId, recordId, ...args
+      baseId,
+      tableId,
+      recordId,
+      opts = {},
     }) {
       return this._makeRequest({
+        method: "GET",
         path: `/${baseId}/${tableId}/${recordId}`,
-        ...args,
+        params: opts,
       });
     },
     listBases(args = {}) {
@@ -279,13 +154,27 @@ export default {
         ...args,
       });
     },
-    listRecords({
-      baseId, tableId, ...args
+    async listRecords({
+      baseId, tableId, params = {},
     }) {
-      return this._makeRequest({
-        path: `/${baseId}/${tableId}`,
-        ...args,
-      });
+      const base = this.base(baseId);
+      const data = [];
+
+      try {
+        await base(tableId).select({
+          ...params,
+        })
+          .eachPage(function page(records, fetchNextPage) {
+            records.forEach(function(record) {
+              data.push(record._rawJson);
+            });
+            fetchNextPage();
+          });
+        return data;
+
+      } catch (err) {
+        this.throwFormattedError(err);
+      }
     },
     listComments({
       baseId, tableId, recordId, ...args
@@ -296,13 +185,10 @@ export default {
       });
     },
     createRecord({
-      baseId, tableId, ...args
+      baseId, tableId, data, opts,
     }) {
-      return this._makeRequest({
-        path: `/${baseId}/${tableId}`,
-        method: "POST",
-        ...args,
-      });
+      const base = this.base(baseId);
+      return base(tableId).create(data, opts);
     },
     createTable({
       baseId, ...args
@@ -332,13 +218,10 @@ export default {
       });
     },
     updateRecord({
-      baseId, tableId, recordId, ...args
+      baseId, tableId, recordId, data, opts,
     }) {
-      return this._makeRequest({
-        path: `/${baseId}/${tableId}/${recordId}`,
-        method: "PATCH",
-        ...args,
-      });
+      const base = this.base(baseId);
+      return base(tableId).update(recordId, data, opts);
     },
     updateTable({
       baseId, tableId, ...args
@@ -368,16 +251,16 @@ export default {
       });
     },
     deleteRecord({
-      baseId, tableId, recordId, ...args
+      baseId, tableId, recordId,
     }) {
-      return this._makeRequest({
-        path: `/${baseId}/${tableId}/${recordId}`,
-        method: "DELETE",
-        ...args,
-      });
+      const base = this.base(baseId);
+      return base(tableId).destroy(recordId);
     },
     throwFormattedError(err) {
-      throw Error(`${err.error} - ${err.statusCode} - ${err.message}`);
+      const errorType = err.error ?? err.response?.data?.error?.type;
+      const statusCode = err.statusCode ?? err.response?.status;
+      const message = err.response?.data?.error?.message ?? err.message;
+      throw Error(`${errorType} - ${statusCode} - ${message}`);
     },
     validateRecord(record) {
       if (typeof record !== "object") {
@@ -397,6 +280,31 @@ export default {
       if (!recordID.startsWith("rec")) {
         throw new Error("Invalid Record ID. See documentation about Finding Airtable record IDs - https://support.airtable.com/docs/finding-airtable-record-ids.");
       }
+    },
+    createWebhook({
+      baseId, ...opts
+    }) {
+      return this._makeRequest({
+        method: "POST",
+        path: `/bases/${baseId}/webhooks`,
+        ...opts,
+      });
+    },
+    deleteWebhook({
+      baseId, webhookId,
+    }) {
+      return this._makeRequest({
+        method: "DELETE",
+        path: `/bases/${baseId}/webhooks/${webhookId}`,
+      });
+    },
+    listWebhookPayloads({
+      baseId, webhookId, ...opts
+    }) {
+      return this._makeRequest({
+        path: `/bases/${baseId}/webhooks/${webhookId}/payloads`,
+        ...opts,
+      });
     },
   },
 };

@@ -1,19 +1,16 @@
-import common from "../common.mjs";
+import common from "../common/common.mjs";
 
 export default {
   ...common,
   key: "microsoft_outlook-new-contact",
   name: "New Contact Event (Instant)",
   description: "Emit new event when a new Contact is created",
-  version: "0.0.8",
+  version: "0.0.35",
   type: "source",
   hooks: {
     ...common.hooks,
     async activate() {
-      await this.activate({
-        changeType: "created",
-        resource: "/me/contacts",
-      });
+      await this.activate(this.getSubscriptionConfig());
     },
     async deactivate() {
       await this.deactivate();
@@ -21,6 +18,12 @@ export default {
   },
   methods: {
     ...common.methods,
+    getSubscriptionConfig() {
+      return {
+        changeType: "created",
+        resource: "/me/contacts",
+      };
+    },
     async getSampleEvents({ pageSize }) {
       return this.microsoftOutlook.listContacts({
         params: {

@@ -1,13 +1,18 @@
+import { ConfigurationError } from "@pipedream/platform";
 import common from "../common/common.mjs";
 import constants from "../common/constants.mjs";
-import { ConfigurationError } from "@pipedream/platform";
 
 export default {
   ...common,
   key: "sendgrid-search-contacts",
   name: "Search Contacts",
   description: "Searches contacts with a SGQL query. [See the docs here](https://docs.sendgrid.com/api-reference/contacts/search-contacts)",
-  version: "0.0.3",
+  version: "0.0.6",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     ...common.props,

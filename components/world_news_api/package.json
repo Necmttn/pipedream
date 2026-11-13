@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/world_news_api",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Pipedream World News API Components",
   "main": "world_news_api.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.4.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/memberful",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pipedream Memberful Components",
-  "main": "dist/app/memberful.app.mjs",
+  "main": "memberful.app.mjs",
   "keywords": [
     "pipedream",
     "memberful"
@@ -13,7 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "crypto": "^1.0.1",
     "uuid": "^9.0.0"
   }
 }

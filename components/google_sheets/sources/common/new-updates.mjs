@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import base from "./http-based/base.mjs";
 import zlib from "zlib";
 
@@ -17,26 +16,34 @@ export default {
           sheetId: c.sheetID,
         }),
       ],
+      type: "integer[]",
+      label: "Worksheet ID(s)",
+      description: "Select one or more worksheet(s), or provide an array of worksheet IDs.",
+    },
+    maxRows: {
+      type: "integer",
+      label: "Max Rows to Monitor",
+      description: "Maximum number of rows to monitor for changes. Defaults to 10000. Increase with caution as larger values may cause memory issues.",
+      optional: true,
+      default: 10000,
     },
   },
   methods: {
-    getMeta(spreadsheet, worksheet, changes) {
+    getBatchSize() {
+      return 1000; // Process 1000 rows at a time
+    },
+    getMaxRows() {
+      return this.maxRows || 10000;
+    },
+    getMeta(spreadsheet, worksheet) {
       const {
         sheetId: worksheetId,
         title: worksheetTitle,
       } = worksheet.properties;
-      const {
-        spreadsheetId: sheetId,
-        properties: { title: sheetTitle },
-      } = spreadsheet;
-
-      const changesHash = crypto
-        .createHash("md5")
-        .update(JSON.stringify(changes))
-        .digest("base64");
+      const { properties: { title: sheetTitle } } = spreadsheet;
 
       const ts = Date.now();
-      const id = `${sheetId}${worksheetId}${changesHash}${ts}`;
+      const id = `${worksheetId}${ts}`;
       const summary = `${sheetTitle} - ${worksheetTitle}`;
       return {
         id,
@@ -62,6 +69,9 @@ export default {
     getWorksheetIds() {
       return this.worksheetIDs.map((i) => i.toString());
     },
+    _getBatchKey(baseId, batchIndex) {
+      return `${baseId}_batch_${batchIndex}`;
+    },
     _getSheetValues(id) {
       const stringBuffer = this.db.get(id);
 
@@ -77,6 +87,51 @@ export default {
       const compressed = zlib.gzipSync(JSON.stringify(sheetValues));
       const stringBuffer = compressed.toString("base64");
       this.db.set(id, stringBuffer);
+    },
+    _getBatchedSheetValues(baseId) {
+      const allValues = [];
+      let batchIndex = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const batchKey = this._getBatchKey(baseId, batchIndex);
+        const batchValues = this._getSheetValues(batchKey);
+
+        if (!batchValues) {
+          hasMore = false;
+          break;
+        }
+
+        allValues.push(...batchValues);
+        batchIndex++;
+      }
+
+      return allValues.length > 0
+        ? allValues
+        : null;
+    },
+    _setBatchedSheetValues(baseId, sheetValues) {
+      const batchSize = this.getBatchSize();
+      const maxRows = this.getMaxRows();
+
+      // Limit to maxRows
+      const limitedValues = sheetValues.slice(0, maxRows);
+
+      // Clear old batches first
+      let batchIndex = 0;
+      while (this.db.get(this._getBatchKey(baseId, batchIndex))) {
+        this.db.set(this._getBatchKey(baseId, batchIndex), undefined);
+        batchIndex++;
+      }
+
+      // Store in batches
+      batchIndex = 0;
+      for (let i = 0; i < limitedValues.length; i += batchSize) {
+        const batch = limitedValues.slice(i, i + batchSize);
+        const batchKey = this._getBatchKey(baseId, batchIndex);
+        this._setSheetValues(batchKey, batch);
+        batchIndex++;
+      }
     },
     indexToColumnLabel(index) {
       let columnLabel = "";
@@ -113,7 +168,7 @@ export default {
      * Sets rowCount to the larger of previous rows or current rows
      */
     getRowCount(newValues, oldValues) {
-      return Math.max(newValues.length, oldValues.length);
+      return Math.max(newValues.length, oldValues?.length || 0);
     },
     /**
      * Sets colCount to the larger of previous columns or current columns
@@ -139,10 +194,8 @@ export default {
     },
     async getContentDiff(spreadsheet, worksheet) {
       const sheetId = this.getSheetId();
-      const oldValues =
-        this._getSheetValues(
-          `${spreadsheet.spreadsheetId}${worksheet.properties.sheetId}`,
-        ) || null;
+      const baseId = `${spreadsheet.spreadsheetId}${worksheet.properties.sheetId}`;
+      const oldValues = this._getBatchedSheetValues(baseId) || null;
       const currentValues = await this.googleSheets.getSpreadsheetValues(
         sheetId,
         worksheet.properties.title,
@@ -175,9 +228,11 @@ export default {
           continue;
         }
 
-        const offsetLength = Math.max(values.length - offset, 0);
+        const maxRows = this.getMaxRows();
+        const offsetLength = Math.max(Math.min(values.length, maxRows) - offset, 0);
         const offsetValues = values.slice(0, offsetLength);
-        this._setSheetValues(`${sheetId}${worksheetId}`, offsetValues);
+        const baseId = `${sheetId}${worksheetId}`;
+        this._setBatchedSheetValues(baseId, offsetValues);
       }
     },
     async processSpreadsheet(spreadsheet) {
@@ -197,8 +252,11 @@ export default {
           spreadsheet,
           worksheet,
         );
-        const newValues = currentValues.values || [];
+        const maxRows = this.getMaxRows();
+        const rawNewValues = currentValues.values || [];
+        const newValues = rawNewValues.slice(0, maxRows);
         let changes = [];
+
         // check if there are differences in the spreadsheet values
         if (JSON.stringify(oldValues) !== JSON.stringify(newValues)) {
           let rowCount = this.getRowCount(newValues, oldValues);
@@ -217,13 +275,11 @@ export default {
               worksheet,
               changes,
             },
-            this.getMeta(spreadsheet, worksheet, changes),
+            this.getMeta(spreadsheet, worksheet),
           );
         }
-        this._setSheetValues(
-          `${spreadsheet.spreadsheetId}${worksheet.properties.sheetId}`,
-          newValues || [],
-        );
+        const baseId = `${spreadsheet.spreadsheetId}${worksheet.properties.sheetId}`;
+        this._setBatchedSheetValues(baseId, newValues || []);
       }
     },
   },

@@ -8,17 +8,12 @@ export default {
         airtable,
         "baseId",
       ],
-      withLabel: true,
     },
     tableId: {
       propDefinition: [
         airtable,
         "tableId",
-        ({ baseId }) => ({
-          baseId: baseId.value,
-        }),
       ],
-      withLabel: true,
     },
   },
 };

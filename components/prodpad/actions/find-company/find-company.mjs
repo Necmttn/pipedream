@@ -6,7 +6,13 @@ export default {
   name: "Find Company",
   description: "Finds a company. [See the docs](https://app.swaggerhub.com/apis-docs/ProdPad/prodpad/1.0#/Feedback/GetCompanies).",
   type: "action",
-  version: "0.0.1",
+  ai: "optimized",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   props: {
     app,
     name: {

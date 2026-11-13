@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/phrase",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Pipedream Phrase Components",
   "main": "phrase.app.mjs",
   "keywords": [
@@ -14,6 +14,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.1.0"
+    "@pipedream/platform": "^1.6.8"
   }
 }

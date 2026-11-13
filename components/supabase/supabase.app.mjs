@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js@2.39.0";
+import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 import constants from "./common/constants.mjs";
 
 export default {
@@ -44,8 +45,41 @@ export default {
     },
   },
   methods: {
+    verifyForErrors(resp) {
+      if (resp.error) {
+        throw new Error(JSON.stringify(resp, null, 2));
+      }
+    },
     async _client() {
-      return createClient(`https://${this.$auth.subdomain}.supabase.co`, this.$auth.service_key);
+      return createClient(`https://${this.$auth.subdomain}.supabase.co`, this.$auth.service_key, {
+        realtime: {
+          transport: ws,
+        },
+      });
+    },
+    retryWithExponentialBackoff(func, maxAttempts = 3, baseDelayS = 2) {
+      let attempt = 0;
+      const verifyForErrors = this.verifyForErrors;
+
+      const execute = async () => {
+        try {
+          const resp = await func();
+          verifyForErrors(resp);
+          return resp;
+        } catch (error) {
+          if (attempt === maxAttempts - 1) {
+            throw error;
+          }
+
+          const delayMs = Math.pow(baseDelayS, attempt) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+          attempt++;
+          return execute();
+        }
+      };
+
+      return execute();
     },
     async selectRow(args) {
       const client = await this._client();
@@ -58,16 +92,15 @@ export default {
         ascending = args.sortOrder === "ascending",
         max,
       } = args;
-      const query = this.baseFilter(client, table, orderBy, ascending, max);
-      if (filter) {
-        const filterMethod = this[filter];
-        filterMethod(query, column, value);
-      }
-      const resp = await query;
-      if (resp.error) {
-        throw new Error(JSON.stringify(resp.error, null, 2));
-      }
-      return resp.data;
+      const ctx = this;
+      const resp = await this.retryWithExponentialBackoff(async () => {
+        let query = ctx.baseFilter(client, table, orderBy, ascending, max);
+        if (filter) {
+          query = ctx[filter](query, column, value);
+        }
+        return await query;
+      });
+      return resp;
     },
     baseFilter(client, table, orderBy, ascending, max) {
       return client
@@ -112,42 +145,73 @@ export default {
     },
     async insertRow(table, rowData = {}) {
       const client = await this._client();
-      const { data } = await client
+      const resp = await client
         .from(table)
         .insert(rowData)
         .select();
-      return data;
+      this.verifyForErrors(resp);
+      return resp;
     },
     async updateRow(table, column, value, rowData = {}) {
       const client = await this._client();
-      const { data } = await client
+      const resp = await client
         .from(table)
         .update(rowData)
         .eq(column, value)
         .select();
-      return data;
+      this.verifyForErrors(resp);
+      return resp;
     },
     async upsertRow(table, rowData = {}) {
       const client = await this._client();
-      const { data } = await client
+      const resp = await client
         .from(table)
         .upsert(rowData)
         .select();
-      return data;
+      this.verifyForErrors(resp);
+      return resp;
     },
     async deleteRow(table, column, value) {
       const client = await this._client();
-      const { data } = await client
+      const resp = await client
         .from(table)
         .delete()
         .eq(column, value)
         .select();
-      return data;
+      this.verifyForErrors(resp);
+      return resp;
     },
     async remoteProcedureCall(functionName, args = {}) {
       const client = await this._client();
-      const { data } = await client.rpc(functionName, args);
-      return data;
+      const resp = await client.rpc(functionName, args);
+      this.verifyForErrors(resp);
+      return resp;
+    },
+    async countRows(args) {
+      const client = await this._client();
+      const {
+        table,
+        column,
+        filter,
+        value,
+      } = args;
+      const ctx = this;
+      const resp = await this.retryWithExponentialBackoff(async () => {
+        let query = client
+          .from(table)
+          .select("*", {
+            count: "exact",
+            head: true,
+          });
+        if (filter) {
+          query = ctx[filter](query, column, value);
+        }
+        return await query;
+      });
+      return {
+        count: resp.count,
+        error: resp.error,
+      };
     },
   },
 };

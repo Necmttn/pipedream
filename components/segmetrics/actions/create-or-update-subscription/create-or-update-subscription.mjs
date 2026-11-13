@@ -3,10 +3,16 @@ import constants from "../common/constants.mjs";
 
 export default {
   name: "Create Or Update Subscription",
-  version: "0.0.3",
+  version: "0.0.5",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "segmetrics-create-or-update-subscription",
   description: "Create or update a subscription. [See documentation here](https://developers.segmetrics.io/#subscriptions)",
   type: "action",
+  ai: "optimized",
   props: {
     app,
     integrationId: {

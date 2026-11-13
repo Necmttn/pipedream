@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/svix",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Pipedream Svix Components",
   "main": "svix.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.3.0"
+    "@pipedream/platform": "^1.6.8"
   }
 }

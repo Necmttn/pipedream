@@ -1,10 +1,29 @@
+// x-pd-ai: optimized
 import { axios } from "@pipedream/platform";
 import constants from "./common/constants.mjs";
+
+const MAX_LIMIT = 1000;
+const MIN_LIMIT = 1;
 
 export default {
   type: "app",
   app: "box",
   propDefinitions: {
+    itemType: {
+      type: "string",
+      label: "Item Type",
+      description: "The type of Box item. Valid values: `file` or `folder`.",
+      options: constants.itemTypes,
+    },
+    limit: {
+      type: "integer",
+      label: "Limit",
+      description: "The maximum number of results to return per page (max 1000)",
+      optional: true,
+      default: constants.pageSize,
+      min: MIN_LIMIT,
+      max: MAX_LIMIT,
+    },
     fields: {
       type: "string[]",
       label: "Fields",
@@ -13,8 +32,9 @@ export default {
     },
     file: {
       type: "string",
-      label: "File",
-      description: "The file to upload to Box, please provide a file from `/tmp`. To upload a file to `/tmp` folder, please follow the doc [here](https://pipedream.com/docs/code/nodejs/working-with-files/#writing-a-file-to-tmp)",
+      label: "File Path or URL",
+      description: "The file to upload. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`)",
+      format: "file-ref",
     },
     createdAt: {
       type: "string",
@@ -129,7 +149,9 @@ export default {
       type: "string",
       label: "Target",
       description: "The target item that will be used by webhooks.",
-      async options({ prevContext }) {
+      async options({
+        prevContext, type,
+      }) {
         const {
           marker,
           queue,
@@ -154,7 +176,7 @@ export default {
                 ...resp.entries.filter((e) => e.type == "folder").map((e) => e.id),
               ],
             },
-            options: resp.entries.map((e) => ({
+            options: resp.entries.filter((e) => !type || e.type == type).map((e) => ({
               value: JSON.stringify({
                 id: e.id,
                 type: e.type,
@@ -185,7 +207,7 @@ export default {
                   ...innerResp.entries.filter((e) => e.type == "folder").map((e) => e.id),
                 ],
               },
-              options: innerResp.entries.map((e) => ({
+              options: innerResp.entries.filter((e) => !type || e.type == type).map((e) => ({
                 value: JSON.stringify({
                   id: e.id,
                   type: e.type,
@@ -242,10 +264,10 @@ export default {
       };
     },
     async _makeRequest({
-      $, path, headers, ...otherConfig
+      $, url, path, headers, ...otherConfig
     } = {}) {
       const config = {
-        url: this._getApiUrl(path),
+        url: url ?? this._getApiUrl(path),
         headers: this._getHeaders(headers),
         ...otherConfig,
       };
@@ -265,6 +287,12 @@ export default {
       return this._makeRequest({
         method: "DELETE",
         path: `/webhooks/${hookId}`,
+        ...args,
+      });
+    },
+    async listWebhooks(args = {}) {
+      return this._makeRequest({
+        path: "/webhooks",
         ...args,
       });
     },
@@ -303,10 +331,126 @@ export default {
         ...args,
       });
     },
+    async getFile({
+      fileId, ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "GET",
+        path: `/files/${fileId}`,
+        ...args,
+      });
+    },
     async searchContent(args = {}) {
       return this._makeRequest({
         method: "GET",
         path: "/search",
+        ...args,
+      });
+    },
+    async getComments({
+      fileId, ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "GET",
+        path: `/files/${fileId}/comments`,
+        ...args,
+      });
+    },
+    async createSignRequest(args = {}) {
+      return this._makeRequest({
+        method: "POST",
+        path: "/sign_requests",
+        ...args,
+      });
+    },
+    async createFolder(args = {}) {
+      return this._makeRequest({
+        method: "POST",
+        path: "/folders",
+        ...args,
+      });
+    },
+    async updateFolder({
+      folderId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "PUT",
+        path: `/folders/${folderId}`,
+        ...args,
+      });
+    },
+    async deleteFolder({
+      folderId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "DELETE",
+        path: `/folders/${folderId}`,
+        ...args,
+      });
+    },
+    async updateFile({
+      fileId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "PUT",
+        path: `/files/${fileId}`,
+        ...args,
+      });
+    },
+    async listFileVersions({
+      fileId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "GET",
+        path: `/files/${fileId}/versions`,
+        ...args,
+      });
+    },
+    async createCollaboration(args = {}) {
+      return this._makeRequest({
+        method: "POST",
+        path: "/collaborations",
+        ...args,
+      });
+    },
+    async deleteCollaboration({
+      collaborationId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "DELETE",
+        path: `/collaborations/${collaborationId}`,
+        ...args,
+      });
+    },
+    async listFileCollaborations({
+      fileId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "GET",
+        path: `/files/${fileId}/collaborations`,
+        ...args,
+      });
+    },
+    async listFolderCollaborations({
+      folderId,
+      ...args
+    } = {}) {
+      return this._makeRequest({
+        method: "GET",
+        path: `/folders/${folderId}/collaborations`,
+        ...args,
+      });
+    },
+    async createComment(args = {}) {
+      return this._makeRequest({
+        method: "POST",
+        path: "/comments",
         ...args,
       });
     },

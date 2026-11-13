@@ -1,16 +1,18 @@
 {
   "name": "@pipedream/processplan",
-  "version": "0.0.2",
+  "version": "0.1.1",
   "description": "Pipedream ProcessPlan Components",
-  "main": "dist/app/processplan.app.mjs",
+  "main": "processplan.app.mjs",
   "keywords": [
     "pipedream",
     "processplan"
   ],
-  "files": ["dist"],
   "homepage": "https://pipedream.com/apps/processplan",
   "author": "Pipedream <support@pipedream.com> (https://pipedream.com/)",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@pipedream/platform": "^3.4.0"
   }
 }

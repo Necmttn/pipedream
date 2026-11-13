@@ -2,7 +2,12 @@ import app from "../../airmeet.app.mjs";
 
 export default {
   name: "Add Authorized Attendee",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "airmeet-add-authorized-attendee",
   description: "Add authorized Attendee. [See the documentation](https://help.airmeet.com/support/solutions/articles/82000467794-airmeet-public-apis-v2-0#5.1-Add-Authorized-Attendee)",
   type: "action",
@@ -17,17 +22,17 @@ export default {
     email: {
       type: "string",
       label: "Email",
-      description: "Email of the atendee",
+      description: "Email of the attendee",
     },
     firstName: {
       type: "string",
       label: "First name",
-      description: "First name of the atendee",
+      description: "First name of the attendee",
     },
     lastName: {
       type: "string",
       label: "Last name",
-      description: "Last name of the atendee",
+      description: "Last name of the attendee",
     },
   },
   async run({ $ }) {

@@ -34,11 +34,11 @@ export default {
     },
   },
   methods: {
-    setLastRun(value: string) {
+    setLastRun(value: number) {
       this.db.set("lastRun", value);
     },
     getLastRun() {
-      const lastRun: string = this.db.get("lastRun");
+      const lastRun: number = this.db.get("lastRun");
       return lastRun
         ? new Date(lastRun)
         : null;
@@ -50,22 +50,26 @@ export default {
       throw new Error("getSummary() not implemented in component");
     },
     async getAndProcessData() {
+      const currentRun: number = Date.now();
       const lastRun: Date = this.getLastRun();
       const items: EntityWithCreateTime[] = await this.getItems();
-      const ts = Date.now();
-      this.setLastRun(ts - 30000);
+      console.log("Number of reviews: ", items?.length ?? 0);
 
-      const filteredItems = lastRun
-        ? items.filter(({ createTime }) => new Date(createTime) >= lastRun)
-        : items.slice(-10);
+      const filteredItems = (lastRun
+        ? items?.filter(({ createTime }) => new Date(createTime) >= lastRun)
+        : items?.slice(-10)) ?? [];
 
       filteredItems.reverse().forEach((item) => {
         this.$emit(item, {
           id: this.app.getCleanName(item.name),
           summary: this.getSummary(item),
-          ts,
+          ts: new Date(item.createTime),
         });
       });
+
+      if (filteredItems.length) {
+        this.setLastRun(currentRun);
+      }
     },
   },
   async run() {

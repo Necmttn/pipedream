@@ -4,8 +4,13 @@ import frontApp from "../../frontapp.app.mjs";
 export default {
   key: "frontapp-send-new-message",
   name: "Send New Message",
-  description: "Sends a new message from a channel. It will create a new conversation. [See the docs here](https://dev.frontapp.com/reference/post_channels-channel-id-messages).",
-  version: "0.2.4",
+  description: "Sends a new message from a channel. It will create a new conversation. [See the documentation](https://dev.frontapp.com/reference/post_channels-channel-id-messages).",
+  version: "0.2.12",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     frontApp,
@@ -38,7 +43,7 @@ export default {
     body: {
       type: "string",
       label: "Body",
-      description: "Body of the message",
+      description: "Body of the message. Accepts HTML",
     },
     text: {
       type: "string",
@@ -83,6 +88,12 @@ export default {
         frontApp,
         "bcc",
       ],
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
     },
   },
   async run({ $ }) {

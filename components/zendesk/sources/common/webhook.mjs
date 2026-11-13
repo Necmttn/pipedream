@@ -57,7 +57,7 @@ export default {
 
       const { trigger } = await this.createTrigger({
         customSubdomain,
-        data: this.setupTriggerData({
+        data: await this.setupTriggerData({
           webhookId,
           categoryId,
         }),
@@ -171,7 +171,7 @@ export default {
         },
       };
     },
-    setupTriggerData({
+    async setupTriggerData({
       webhookId, categoryId,
     }) {
       return {
@@ -184,7 +184,7 @@ export default {
               field: "notification_webhook",
               value: [
                 webhookId,
-                JSON.stringify(this.getTriggerPayload()),
+                JSON.stringify(await this.getTriggerPayload()),
               ],
             },
           ],
@@ -211,6 +211,15 @@ export default {
     },
     isRelevant() {
       return true;
+    },
+    emitEvent(payload) {
+      const ts = Date.parse(payload.updatedAt);
+      const id = `${payload.ticketId}-${ts}`;
+      this.$emit(payload, {
+        id,
+        summary: payload.title || payload.ticketId,
+        ts,
+      });
     },
   },
   async run(event) {
@@ -241,13 +250,6 @@ export default {
       return;
     }
 
-    const ts = Date.parse(payload.updatedAt);
-    const id = `${payload.ticketId}-${ts}`;
-
-    this.$emit(payload, {
-      id,
-      summary: payload.title || payload.ticketId,
-      ts,
-    });
+    this.emitEvent(payload);
   },
 };

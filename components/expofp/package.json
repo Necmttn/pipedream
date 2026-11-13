@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/expofp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Pipedream ExpoFP Components",
   "main": "expofp.app.mjs",
   "keywords": [
@@ -16,6 +16,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.1.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

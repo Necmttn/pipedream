@@ -5,7 +5,12 @@ export default {
   name: "Execute Query",
   description: "Executes a SQL query and returns the results. [See the documentation](https://learn.microsoft.com/en-us/sql/t-sql/queries/select-transact-sql?view=sql-server-ver16)",
   type: "action",
-  version: "0.0.1",
+  version: "0.0.5",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     app,
     query: {
@@ -21,18 +26,17 @@ export default {
       optional: true,
     },
   },
-  run({ $: step }) {
+  async run({ $: step }) {
     const {
       app,
       inputs,
       query,
     } = this;
-
-    return app.executeQuery({
-      step,
+    const response = await app.executeQuery({
       query,
       inputs,
-      summary: () => "Successfully executed query.",
     });
+    step.export("$summary", "Successfully executed query.");
+    return response;
   },
 };

@@ -1,16 +1,18 @@
 {
   "name": "@pipedream/freshbooks",
-  "version": "0.0.2",
+  "version": "0.2.0",
   "description": "Pipedream FreshBooks Components",
-  "main": "dist/app/freshbooks.app.mjs",
+  "main": "freshbooks.app.mjs",
   "keywords": [
     "pipedream",
     "freshbooks"
   ],
-  "files": ["dist"],
   "homepage": "https://pipedream.com/apps/freshbooks",
   "author": "Pipedream <support@pipedream.com> (https://pipedream.com/)",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@pipedream/platform": "^3.2.5"
   }
 }

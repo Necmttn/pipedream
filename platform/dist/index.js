@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.$sendConfigRuntimeTypeChecker = exports.$send = exports.$end = exports.END_NEEDLE = exports.$event = exports.sendTypeMap = exports.SendConfigSSE = exports.SendConfigSnowflake = exports.SendConfigSQL = exports.SendConfigS3 = exports.SendConfigHTTP = exports.HTTP_METHODS = exports.SendConfigEmit = exports.SendConfigEmit_optional = exports.SendConfigEmit_required = exports.SendConfigEmail = exports.transformConfigForOauth = exports.axios = void 0;
+exports.$sendConfigRuntimeTypeChecker = exports.$send = exports.END_NEEDLE = exports.$event = exports.sendTypeMap = exports.SendConfigSSE = exports.SendConfigSnowflake = exports.SendConfigSQL = exports.SendConfigS3 = exports.SendConfigHTTP = exports.HTTP_METHODS = exports.SendConfigEmit = exports.SendConfigEmit_optional = exports.SendConfigEmit_required = exports.SendConfigEmail = exports.PD_OFFICIAL_GMAIL_OAUTH_CLIENT_ID = exports.DEFAULT_POLLING_SOURCE_TIMER_INTERVAL = exports.sqlProxy = exports.sqlProp = exports.ConfigurationError = exports.getFileStream = exports.getFileStreamAndMetadata = exports.jsonStringifySafe = exports.cloneSafe = exports.transformConfigForOauth = exports.axios = void 0;
+exports.$end = $end;
 const t = require("io-ts");
 const axios_1 = require("./axios");
 exports.axios = axios_1.default;
@@ -8,10 +9,18 @@ Object.defineProperty(exports, "transformConfigForOauth", { enumerable: true, ge
 var utils_1 = require("./utils");
 Object.defineProperty(exports, "cloneSafe", { enumerable: true, get: function () { return utils_1.cloneSafe; } });
 Object.defineProperty(exports, "jsonStringifySafe", { enumerable: true, get: function () { return utils_1.jsonStringifySafe; } });
+var file_stream_1 = require("./file-stream");
+Object.defineProperty(exports, "getFileStreamAndMetadata", { enumerable: true, get: function () { return file_stream_1.getFileStreamAndMetadata; } });
+Object.defineProperty(exports, "getFileStream", { enumerable: true, get: function () { return file_stream_1.getFileStream; } });
 var errors_1 = require("./errors");
 Object.defineProperty(exports, "ConfigurationError", { enumerable: true, get: function () { return errors_1.ConfigurationError; } });
+var sql_prop_1 = require("./sql-prop");
+Object.defineProperty(exports, "sqlProp", { enumerable: true, get: function () { return sql_prop_1.default; } });
+var sql_proxy_1 = require("./sql-proxy");
+Object.defineProperty(exports, "sqlProxy", { enumerable: true, get: function () { return sql_proxy_1.default; } });
 var constants_1 = require("./constants");
 Object.defineProperty(exports, "DEFAULT_POLLING_SOURCE_TIMER_INTERVAL", { enumerable: true, get: function () { return constants_1.DEFAULT_POLLING_SOURCE_TIMER_INTERVAL; } });
+Object.defineProperty(exports, "PD_OFFICIAL_GMAIL_OAUTH_CLIENT_ID", { enumerable: true, get: function () { return constants_1.PD_OFFICIAL_GMAIL_OAUTH_CLIENT_ID; } });
 const SendPayload = t.union([
     t.string,
     t.object,
@@ -114,7 +123,6 @@ function $end(message) {
     };
     throw err;
 }
-exports.$end = $end;
 exports.$sendConfigRuntimeTypeChecker = (function () {
     const ret = {};
     for (const [sendName, sendConfigType,] of Object.entries(exports.sendTypeMap)) {

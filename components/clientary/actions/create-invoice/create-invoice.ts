@@ -4,10 +4,16 @@ import app from "../../app/clientary.app";
 
 export default defineAction({
   key: "clientary-create-invoice",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   name: "Create Invoice",
   description: "Creates a new invoice. [See docs here](https://www.clientary.com/api/invoices)",
   type: "action",
+  ai: "optimized",
   props: {
     app,
     date: {
@@ -43,7 +49,7 @@ export default defineAction({
     if (this.invoiceItemsAttributes) {
       try {
         invoiceItemsAttributes = JSON.parse(this.invoiceItemsAttributes);
-      } catch (err) {
+      } catch {
         throw new ConfigurationError("`Estimate Items Attributes` must be a valid JSON Array string");
       }
     }

@@ -3,8 +3,13 @@ import jira from "../../jira.app.mjs";
 export default {
   key: "jira-get-all-projects",
   name: "Get All Projects",
-  description: "Gets metadata on all projects, [See the docs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-project-get)",
-  version: "0.1.9",
+  description: "Gets metadata on all projects. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-project-get)",
+  version: "0.1.27",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     jira,
@@ -16,7 +21,7 @@ export default {
     },
     recent: {
       type: "integer",
-      label: "Recent",
+      label: "Recent Projects",
       description: "Returns the user's most recently accessed projects. You may specify the number of results to return up to a maximum of 20. If access is anonymous, then the recently accessed projects are based on the current HTTP session.",
       optional: true,
     },
@@ -25,7 +30,7 @@ export default {
         jira,
         "properties",
       ],
-      description: "Details of issue properties to be add or update, please provide an array of objects with keys and values.",
+      description: "Details of issue properties to be added or updated. Please provide an array of objects with keys and values.",
     },
     expand: {
       propDefinition: [
@@ -60,8 +65,51 @@ export default {
     for await (const project of resourcesStream) {
       projects.push(project);
     }
+
+    const getProjectBrowserUrl = async (baseUrl, project) => {
+      if (!project.key) return undefined;
+      const {
+        projectTypeKey, simplified, style,
+      } = project;
+      if (projectTypeKey === "service_desk") {
+        return `${baseUrl}/jira/servicedesk/projects/${project.key}/queues`;
+      }
+      if (projectTypeKey === "business") {
+        return `${baseUrl}/jira/core/projects/${project.key}/board`;
+      }
+      const boards = await this.jira.listBoards({
+        $,
+        cloudId: this.cloudId,
+        params: {
+          projectKeyOrId: project.key,
+          maxResults: 1,
+        },
+      });
+      const boardId = boards?.values?.[0]?.id;
+      const isNextGen = simplified || style === "next-gen";
+      const basePath = isNextGen
+        ? `${baseUrl}/jira/software/projects/${project.key}/boards`
+        : `${baseUrl}/jira/software/c/projects/${project.key}/boards`;
+      return boardId
+        ? `${basePath}/${boardId}`
+        : basePath;
+    };
+
+    let baseUrl;
+    try {
+      baseUrl = await this.jira.getCloudBaseUrl(this.cloudId);
+    } catch (e) {
+      console.log("Could not enrich response with browser URL", e.message);
+    }
+    const projectsWithUrls = baseUrl
+      ? await Promise.all(projects.map(async (project) => ({
+        ...project,
+        browserUrl: await getProjectBrowserUrl(baseUrl, project),
+      })))
+      : projects;
+
     // eslint-disable-next-line multiline-ternary
     $.export("$summary", `Successfully fetched ${projects.length} ${projects.length === 1 ? "project" : "projects"}`);
-    return projects;
+    return projectsWithUrls;
   },
 };

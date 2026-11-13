@@ -3,8 +3,13 @@ import todoist from "../../todoist.app.mjs";
 export default {
   key: "todoist-delete-label",
   name: "Delete Label",
-  description: "Deletes a label. [See the docs here](https://developer.todoist.com/rest/v2/#delete-a-personal-label)",
-  version: "0.0.3",
+  description: "Deletes a label. [See the documentation](https://developer.todoist.com/api/v1#tag/Labels/operation/delete_label_api_v1_labels__label_id__delete)",
+  version: "0.0.10",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     todoist,

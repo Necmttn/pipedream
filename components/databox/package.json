@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/databox",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Pipedream Databox Components",
   "main": "databox.app.mjs",
   "keywords": [
@@ -14,7 +14,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.1.0",
+    "@pipedream/platform": "^1.6.8",
     "databox": "^2.0.1"
   }
 }

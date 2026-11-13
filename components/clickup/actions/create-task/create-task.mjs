@@ -1,12 +1,18 @@
 import clickup from "../../clickup.app.mjs";
-import common from "../common/list-props.mjs";
 import constants from "../common/constants.mjs";
+import common from "../common/list-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-create-task",
   name: "Create Task",
-  description: "Creates a new task. See the docs [here](https://clickup.com/api) in **Tasks / Create Task** section.",
-  version: "0.0.12",
+  description: "Creates a new task. [See the documentation](https://clickup.com/api) in **Tasks / Create Task** section.",
+  version: "0.0.17",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,
@@ -54,27 +60,6 @@ export default {
       ],
       optional: true,
     },
-    status: {
-      propDefinition: [
-        clickup,
-        "statuses",
-        (c) => ({
-          listId: c.listId,
-        }),
-      ],
-      optional: true,
-    },
-    parent: {
-      label: "Parent Task",
-      propDefinition: [
-        clickup,
-        "tasks",
-        (c) => ({
-          listId: c.listId,
-        }),
-      ],
-      optional: true,
-    },
     dueDate: {
       type: "string",
       label: "Due Date",
@@ -85,6 +70,49 @@ export default {
       type: "boolean",
       label: "Due Date Time",
       description: "If set `true`, due date will be given with time. If not it will only be the closest date",
+      optional: true,
+    },
+    folderId: {
+      propDefinition: [
+        common.props.clickup,
+        "folderId",
+        (c) => ({
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: true,
+    },
+    listId: {
+      propDefinition: [
+        common.props.clickup,
+        "listId",
+        (c) => ({
+          folderId: c.folderId,
+          spaceId: c.spaceId,
+        }),
+      ],
+      optional: false,
+    },
+    status: {
+      propDefinition: [
+        common.props.clickup,
+        "status",
+        (c) => ({
+          listId: c.listId,
+        }),
+      ],
+    },
+    parent: {
+      propDefinition: [
+        common.props.clickup,
+        "taskId",
+        (c) => ({
+          listId: c.listId,
+          useCustomTaskIds: c.useCustomTaskIds,
+          authorizedTeamId: c.authorizedTeamId,
+        }),
+      ],
+      label: "Parent Task ID",
       optional: true,
     },
   },

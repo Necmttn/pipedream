@@ -1,8 +1,15 @@
 import googleCloud from "../../google_cloud.app.mjs";
+import { ZoneOperationsClient } from "@google-cloud/compute";
+import { ConfigurationError } from "@pipedream/platform";
 
 export default {
   name: "Switch Instance Boot Status",
-  version: "0.0.2",
+  version: "0.0.5",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   key: "google_cloud-switch-instance-boot-status",
   type: "action",
   description: "Switch a virtual machine instance boot status to start or stop it. [See the documentation](https://cloud.google.com/compute/docs/instances/stop-start-instance)",
@@ -18,8 +25,8 @@ export default {
       propDefinition: [
         googleCloud,
         "instanceName",
-        ({ zone }) => ({
-          zone,
+        (c) => ({
+          zone: c.zone,
         }),
       ],
     },
@@ -39,6 +46,38 @@ export default {
       default: false,
     },
   },
+  methods: {
+    zoneOperationsClient() {
+      return new ZoneOperationsClient(this.googleCloud.sdkParams());
+    },
+    async waitOperation(operation) {
+      const operationsClient = this.zoneOperationsClient();
+      const sdkParams = this.googleCloud.sdkParams();
+      while (operation.status !== "DONE") {
+        [
+          operation,
+        ] = await operationsClient.wait({
+          operation: operation.name,
+          project: sdkParams.projectId,
+          zone: operation.zone.split("/").pop(),
+        });
+      }
+      return operation;
+    },
+    async switchInstanceBootStatus(zone, instance, newStatus) {
+      if (![
+        "start",
+        "stop",
+      ].includes(newStatus)) {
+        throw new ConfigurationError("The new VM boot status must be 'start' or 'stop'.");
+      }
+      return this.googleCloud.switchInstanceBootStatus({
+        zone,
+        instance,
+        status: newStatus,
+      });
+    },
+  },
   async run({ $ }) {
     const {
       zone,
@@ -47,14 +86,14 @@ export default {
       newInstanceStatus,
     } = this;
 
-    let operation = await this.googleCloud.switchInstanceBootStatus(
+    let operation = await this.switchInstanceBootStatus(
       zone,
       instanceName,
       newInstanceStatus,
     );
 
     if (waitCompletion) {
-      operation = await this.googleCloud.waitOperation(operation);
+      operation = await this.waitOperation(operation);
     }
 
     $.export("$summary", `Instance ${instanceName} boot status was set to ${newInstanceStatus}.`);

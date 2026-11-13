@@ -1,13 +1,20 @@
+import utils from "../../common/utils.mjs";
 import notion from "../../notion.app.mjs";
 import base from "../common/base-page-builder.mjs";
-import utils from "../../common/utils.mjs";
+
+const MAX_CHILDREN_PER_REQUEST = 100;
 
 export default {
   ...base,
   key: "notion-duplicate-page",
-  name: "Duplicate Page",
-  description: "Creates a new page copied from an existing page block. [See the docs](https://developers.notion.com/reference/post-page)",
-  version: "0.0.7",
+  name: "Copy Page From Template",
+  description: "Copy an EXISTING page (template) into a new page with a new title. Use this ONLY when the user is reusing the structure of an existing page as a template (e.g. \"copy this offer letter template for a new candidate\"). Do NOT use to create a new page with original content — for that, use **Create Page**. The source page must already exist in Notion and is identified by its page ID. [See the documentation](https://developers.notion.com/reference/post-page)",
+  version: "0.0.28",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     notion,
@@ -16,7 +23,7 @@ export default {
         notion,
         "pageId",
       ],
-      description: "The page to copy",
+      description: "Select a page to copy or provide a page ID",
     },
     title: {
       propDefinition: [
@@ -31,7 +38,7 @@ export default {
         "pageId",
       ],
       label: "Parent Page ID",
-      description: "The parent page of the new page being created",
+      description: "Select a parent page for the new page being created, or provide the ID of a parent page",
     },
   },
   async run({ $ }) {
@@ -60,12 +67,34 @@ export default {
       icon: this.isFile(icon)
         ? null
         : icon,
-      children: formattedChildren,
+      // Notion accepts at most 100 children per request: create the page with the
+      // first batch, then append the remainder in batches of 100.
+      children: formattedChildren.slice(0, MAX_CHILDREN_PER_REQUEST),
     };
 
     const results = await this.notion.createPage(page);
+    const batchSize = MAX_CHILDREN_PER_REQUEST;
+    try {
+      for (let i = batchSize; i < formattedChildren.length; i += batchSize) {
+        // retries 429s only; other failures fall through to the cleanup below
+        await this.notion.appendBlockWithRetry(
+          results.id,
+          formattedChildren.slice(i, i + batchSize),
+        );
+      }
+    } catch (err) {
+      // Don't leave a partial copy behind (a retry would otherwise create a second page)
+      try {
+        await this.notion.updatePage(results.id, {
+          archived: true,
+        });
+      } catch (cleanupErr) {
+        console.log(`Failed to archive partial copy ${results.id}: ${cleanupErr.message}`);
+      }
+      throw err;
+    }
     const pageName = this.notion.extractPageTitle(results);
-    $.export("$summary", `Successfully created the new page, "[${pageName}](${results.url})"`);
+    $.export("$summary", `Successfully created page "[${pageName}](${results.url})"`);
     return results;
   },
 };

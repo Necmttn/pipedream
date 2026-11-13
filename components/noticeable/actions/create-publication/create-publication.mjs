@@ -2,8 +2,14 @@ import app from "../../noticeable.app.mjs";
 
 export default {
   type: "action",
+  ai: "optimized",
   key: "noticeable-create-publication",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   name: "Create Publication",
   description: "Creates a publication, [See the docs](https://graphdoc.noticeable.io/publication.doc.html)",
   props: {

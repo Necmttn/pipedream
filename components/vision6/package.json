@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/vision6",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Pipedream Vision6 Components",
   "main": "vision6.app.mjs",
   "keywords": [
@@ -13,7 +13,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.2.0",
+    "@pipedream/platform": "^1.6.8",
     "lodash.pickby": "^4.6.0"
   }
 }

@@ -5,9 +5,9 @@ export default {
   ...common,
   key: "asana-task-assigned-in-project",
   type: "source",
-  name: "Task Assigned in Project (Instant)",
+  name: "New Task Assigned in Project (Instant)",
   description: "Emit new event each time a task is assigned, reassigned or unassigned.",
-  version: "0.0.4",
+  version: "0.1.8",
   dedupe: "unique",
   props: {
     ...common.props,
@@ -17,7 +17,7 @@ export default {
       type: "string",
       propDefinition: [
         asana,
-        "projects",
+        "projectsAsync",
         (c) => ({
           workspace: c.workspace,
         }),
@@ -29,7 +29,10 @@ export default {
       description: "Only emit events when tasks are assigned to this user GID",
       propDefinition: [
         asana,
-        "users",
+        "usersAsync",
+        ({ workspace }) => ({
+          workspace,
+        }),
       ],
     },
   },

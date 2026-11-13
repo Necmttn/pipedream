@@ -1,5 +1,6 @@
-import app from "../linkedin/linkedin.app.mjs";
+import app from "@pipedream/linkedin";
 import utils from "./common/utils.mjs";
+import constants from "./common/constants.mjs";
 
 export default {
   ...app,
@@ -123,13 +124,52 @@ export default {
         }));
       },
     },
+    leadFormId: {
+      type: "string",
+      label: "Lead Form ID",
+      description: "Select the lead form to retrieve responses for.",
+      async options({
+        page, adAccountId,
+      }) {
+        const count = 20;
+        const { elements } = await this.searchLeadForms({
+          params: {
+            q: "owner",
+            owner: `(sponsoredAccount:${this.getSponsoredAccountUrn(adAccountId)})`,
+            count,
+            start: page * count,
+          },
+        });
+        return elements.map(({
+          id,
+          name: label,
+        }) => ({
+          label,
+          value: String(id),
+        }));
+      },
+    },
   },
   methods: {
     ...app.methods,
+    _getHeaders() {
+      return {
+        "Authorization": `Bearer ${this.$auth.oauth_access_token}`,
+        "Content-Type": "application/json",
+        "Linkedin-Version": constants.VERSION_HEADER,
+        "X-Restli-Protocol-Version": constants.RESTLI_PROTOCOL_VERSION,
+      };
+    },
     getSponsoredAccountUrn(id) {
+      if (String(id).startsWith("urn:li:sponsoredAccount:")) {
+        return id;
+      }
       return `urn:li:sponsoredAccount:${id}`;
     },
     getSponsoredCampaignUrn(id) {
+      if (String(id).startsWith("urn:li:sponsoredCampaign:")) {
+        return id;
+      }
       return `urn:li:sponsoredCampaign:${id}`;
     },
     getOrganizationUrn(id) {
@@ -140,6 +180,9 @@ export default {
     },
     getEventUrn(id) {
       return `urn:li:event:${id}`;
+    },
+    getVersionedLeadGenFormUrn(id, version = 1) {
+      return `urn:li:versionedLeadGenForm:(urn:li:leadGenForm:${id},${version})`;
     },
     searchCampaigns({
       adAccountId, ...args
@@ -154,9 +197,16 @@ export default {
         "owner",
       ];
       return this._makeRequest({
-        debug: true,
         path: "/leadForms",
         paramsSerializer: utils.getParamsSerializer(utils.encodeParamKeys(keys)),
+        ...args,
+      });
+    },
+    getLeadForm({
+      leadFormId, ...args
+    } = {}) {
+      return this._makeRequest({
+        path: `/leadForms/${leadFormId}`,
         ...args,
       });
     },
@@ -165,7 +215,6 @@ export default {
         "organizer",
       ];
       return this._makeRequest({
-        debug: true,
         path: "/events",
         paramsSerializer: utils.getParamsSerializer(utils.encodeParamKeys(keys)),
         transformResponse: utils.transformResponse,
@@ -174,7 +223,6 @@ export default {
     },
     searchConversions(args = {}) {
       return this._makeRequest({
-        debug: true,
         path: "/conversions",
         paramsSerializer: utils.getParamsSerializer(utils.encodeFn),
         ...args,
@@ -187,7 +235,6 @@ export default {
         "associatedEntity",
       ];
       return this._makeRequest({
-        debug: true,
         path: "/leadFormResponses",
         paramsSerializer: utils.getParamsSerializer(utils.encodeParamKeys(keys)),
         ...args,

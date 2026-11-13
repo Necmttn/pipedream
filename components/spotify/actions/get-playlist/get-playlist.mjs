@@ -4,7 +4,12 @@ export default {
   name: "Get a Playlist",
   description: "Get a playlist owned by a Spotify user. [See the documentation](https://developer.spotify.com/documentation/web-api/reference/get-playlist).",
   key: "spotify-get-playlist",
-  version: "0.0.1",
+  version: "0.0.9",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     spotify,
@@ -23,10 +28,10 @@ export default {
 
     const response = await spotify.getPlaylist({
       $,
-      playlistId: playlistId.value,
+      playlistId,
     });
 
-    $.export("$summary", `The playlist with Id: ${playlistId.value} was successfully fetched!`);
+    $.export("$summary", `The playlist with Id: ${playlistId} was successfully fetched!`);
 
     return response;
   },

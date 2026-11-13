@@ -1,39 +1,40 @@
-import dropbox from "../../dropbox.app.mjs";
+import { getFileStream } from "@pipedream/platform";
 import consts from "../../common/consts.mjs";
-import fs from "fs";
-import got from "got";
+import dropbox from "../../dropbox.app.mjs";
 
 export default {
   name: "Upload a File",
-  description: "Uploads a file to a selected folder. [See docs here](https://dropbox.github.io/dropbox-sdk-js/Dropbox.html#filesUpload__anchor)",
+  description: "Uploads a file to a selected folder. [See the documentation](https://dropbox.github.io/dropbox-sdk-js/Dropbox.html#filesUpload__anchor)",
   key: "dropbox-upload-file",
-  version: "0.0.11",
+  version: "1.0.5",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     dropbox,
     path: {
       propDefinition: [
         dropbox,
-        "pathFolder",
+        "path",
+        () => ({
+          filter: ({ metadata: { metadata: { [".tag"]: type } } }) => type === "folder",
+        }),
       ],
-      description: "The file path in the user's Dropbox to create the file. If not filled, it will be created in the root folder.",
+      description: "Type the folder name to search for it in the user's Dropbox. If not filled, it will be created in the root folder.",
     },
     name: {
       type: "string",
-      label: "File name",
-      description: "The name of your new file.",
-    },
-    fileUrl: {
-      type: "string",
-      label: "File URL",
-      description: "The URL of the file you want to upload to Dropbox. Must specify either File URL or File Path.",
-      optional: true,
+      label: "File Name",
+      description: "The name of your new file (make sure to include the file extension).",
     },
     filePath: {
       type: "string",
-      label: "File Path",
-      description: "The path to the file, e.g. /tmp/myFile.csv . Must specify either File URL or File Path.",
-      optional: true,
+      label: "File Path or URL",
+      description: "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf).",
+      format: "file-ref",
     },
     autorename: {
       type: "boolean",
@@ -60,10 +61,15 @@ export default {
       options: consts.UPLOAD_FILE_MODE_OPTIONS,
       optional: true,
     },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
+    },
   },
   async run({ $ }) {
     const {
-      fileUrl,
       filePath,
       path,
       name,
@@ -74,9 +80,7 @@ export default {
       clientModified,
     } = this;
 
-    const contents = fileUrl
-      ? await got.stream(fileUrl)
-      : fs.createReadStream(filePath);
+    const contents = await getFileStream(filePath);
 
     let normalizedPath = this.dropbox.getNormalizedPath(path, true);
 

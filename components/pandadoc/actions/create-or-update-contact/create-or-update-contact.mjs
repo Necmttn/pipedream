@@ -3,9 +3,14 @@ import app from "../../pandadoc.app.mjs";
 export default {
   key: "pandadoc-create-or-update-contact",
   name: "Create or Update Contact",
-  description: "This method adds or updates a contact using the email as index. [See the docs here](https://developers.pandadoc.com/reference/create-contact)",
+  description: "This method adds or updates a contact using the email as index. [See the documentation here](https://developers.pandadoc.com/reference/create-contact)",
   type: "action",
-  version: "0.0.6",
+  version: "0.0.9",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     app,
     email: {

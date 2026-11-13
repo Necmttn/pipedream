@@ -1,104 +1,59 @@
 import notion from "../../notion.app.mjs";
+import utils from "../../common/utils.mjs";
 import base from "../common/base-page-builder.mjs";
+
+const MAX_BLOCKS = 100;
 
 export default {
   ...base,
   key: "notion-append-block",
   name: "Append Block to Parent",
-  description: "Creates and appends blocks to the specified parent. [See the documentation](https://developers.notion.com/reference/patch-block-children)",
-  version: "0.2.13",
+  description:
+    "Append Markdown content to the bottom of a Notion page (or block)."
+    + " The `content` is parsed from Markdown into Notion blocks — use it to add paragraphs, headings, bullet/numbered lists, to-dos, quotes, code, etc."
+    + " Provide the page ID or URL (use **Search** to resolve a page name into an ID)."
+    + " To change a database row's property values instead, use **Update Page**."
+    + " [See the documentation](https://developers.notion.com/reference/patch-block-children)",
+  version: "1.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     notion,
     pageId: {
-      propDefinition: [
-        notion,
-        "pageId",
-      ],
-      label: "Parent Block ID",
-      description: "The identifier for the parent block",
+      type: "string",
+      label: "Page ID or URL",
+      description: "The ID (or Notion URL) of the page/block to append content to. Use **Search** to resolve a page name into an ID.",
     },
-    blockObjects: {
-      type: "string[]",
-      label: "Block Objects",
-      description: "This prop accepts an array of block objects to be appended. Using a custom expression in this prop is recommended.",
-      optional: true,
-    },
-    blockIds: {
-      propDefinition: [
-        notion,
-        "pageId",
-      ],
-      type: "string[]",
-      label: "Block IDs",
-      description: "Contents of selected blocks will be appended",
-      optional: true,
-    },
-    markupContents: {
-      type: "string[]",
-      label: "Markup Contents",
-      description: "Content of new blocks to append. You must use Markdown syntax [See docs](https://www.notion.so/help/writing-and-editing-basics#markdown-&-shortcuts)",
-      optional: true,
-    },
-    imageUrls: {
-      type: "string[]",
-      label: "Image URLs",
-      description: "List of URLs to append as image blocks",
-      optional: true,
+    content: {
+      type: "string",
+      label: "Content",
+      description: "The Markdown content to append. Supports headings, bullet/numbered lists, to-dos, quotes, and code. Example: `## Notes\\n- First item\\n- Second item`.",
     },
   },
   async run({ $ }) {
-    const children = [];
-    // add blocks from blockObjects
-    if (this.blockObjects?.length > 0) {
-      for (const obj of this.blockObjects) {
-        const child = (typeof obj === "string")
-          ? JSON.parse(obj)
-          : obj;
-        children.push(child);
-      }
-    }
+    const pageId = utils.extractNotionId(this.pageId);
+    const children = this.createBlocks(this.content);
 
-    // add blocks from blockIds
-    if (this.blockIds?.length > 0) {
-      for (const id of this.blockIds) {
-        const block = await this.notion.retrieveBlock(id);
-        block.children = await this.notion.retrieveBlockChildren(block);
-        const formattedChildren = await this.formatChildBlocks(block);
-        children.push(...formattedChildren);
-      }
-    }
-
-    // add blocks from markup
-    if (this.markupContents?.length > 0) {
-      for (const content of this.markupContents) {
-        const block = this.createBlocks(content);
-        children.push(...block);
-      }
-    }
-
-    // add image blocks
-    if (this.imageUrls?.length) {
-      for (const url of this.imageUrls) {
-        children.push({
-          type: "image",
-          image: {
-            type: "external",
-            external: {
-              url,
-            },
-          },
-        });
-      }
-    }
-
-    if (children.length === 0) {
+    if (!children.length) {
       $.export("$summary", "Nothing to append");
       return;
     }
 
-    const { results } = await this.notion.appendBlock(this.pageId, children);
-    $.export("$summary", `Appended ${results.length} block(s) successfully`);
-    return results;
+    const responses = [];
+    let remaining = children;
+    while (remaining.length > 0) {
+      responses.push(await this.notion.appendBlock(pageId, remaining.slice(0, MAX_BLOCKS)));
+      remaining = remaining.slice(MAX_BLOCKS);
+    }
+
+    $.export("$summary", `Appended ${children.length} block${children.length === 1
+      ? ""
+      : "s"} to the page`);
+    return responses;
   },
 };

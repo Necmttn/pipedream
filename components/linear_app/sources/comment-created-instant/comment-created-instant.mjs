@@ -4,10 +4,10 @@ import constants from "../../common/constants.mjs";
 export default {
   ...common,
   key: "linear_app-comment-created-instant",
-  name: "New Created Comment (Instant)",
-  description: "Emit new event when a new comment is created. See the docs [here](https://developers.linear.app/docs/graphql/webhooks)",
+  name: "New Comment Created (Instant)",
+  description: "Emit new event when a new comment is added to an issue in Linear. Returns comment details including content, author, issue reference, and timestamps. Supports filtering by team. See Linear docs for additional info [See the documentation](https://linear.app/developers/webhooks).",
   type: "source",
-  version: "0.1.5",
+  version: "0.1.27",
   dedupe: "unique",
   methods: {
     ...common.methods,
@@ -49,6 +49,11 @@ export default {
           },
         },
       };
+    },
+    getResource(comment) {
+      return this.linearApp.getComment({
+        commentId: comment.id,
+      });
     },
     getMetadata(resource) {
       const {

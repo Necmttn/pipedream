@@ -1,4 +1,5 @@
 import newFilesInstant from "../../../google_drive/sources/new-files-instant/new-files-instant.mjs";
+import googleSlides from "../../google_slides.app.mjs";
 
 export default {
   ...newFilesInstant,
@@ -6,12 +7,12 @@ export default {
   type: "source",
   name: "New Presentation (Instant)",
   description: "Emit new event each time a new presentation is created in a drive.",
-  version: "0.0.2",
+  version: "0.0.9",
   hooks: {
     ...newFilesInstant.hooks,
     async deploy() {
       // Emit sample records on the first run
-      const slides = await this.getPresentations(10);
+      const slides = await this.getPresentations(5);
       for (const fileInfo of slides) {
         const createdTime = Date.parse(fileInfo.createdTime);
         this.$emit(fileInfo, {
@@ -20,6 +21,15 @@ export default {
           ts: createdTime,
         });
       }
+    },
+  },
+  props: {
+    ...newFilesInstant.props,
+    googleSlides,
+    folders: {
+      ...newFilesInstant.props.folders,
+      description:
+        "(Optional) The folders you want to watch. Leave blank to watch for any new presentation in the Drive.",
     },
   },
   methods: {

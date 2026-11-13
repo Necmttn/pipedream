@@ -1,11 +1,13 @@
+import { DEFAULT_LIMIT } from "../../common/constants.mjs";
 import common from "../common/common.mjs";
+import sampleEmit from "./test-event.mjs";
 
 export default {
   ...common,
   key: "hubspot-new-or-updated-crm-object",
   name: "New or Updated CRM Object",
   description: "Emit new event each time a CRM Object of the specified object type is updated.",
-  version: "0.0.12",
+  version: "0.0.48",
   dedupe: "unique",
   type: "source",
   props: {
@@ -17,7 +19,6 @@ export default {
       ],
     },
   },
-  hooks: {},
   methods: {
     ...common.methods,
     getTs(object) {
@@ -38,27 +39,32 @@ export default {
     getParams() {
       return null;
     },
-    getObjectParams(object) {
-      const propertyName = (object == "contacts")
-        ? "lastmodifieddate"
-        : "hs_lastmodifieddate";
-      return {
-        limit: 100,
-        sorts: [
-          {
-            propertyName,
-            direction: "DESCENDING",
-          },
-        ],
+    getObjectParams(object, after) {
+      const propertyName =
+        object == "contacts"
+          ? "lastmodifieddate"
+          : "hs_lastmodifieddate";
+      return this.addDateFilter({
+        data: {
+          limit: DEFAULT_LIMIT,
+          sorts: [
+            {
+              propertyName,
+              direction: "DESCENDING",
+            },
+          ],
+        },
         object,
-      };
+      }, propertyName, after);
     },
     async processResults(after) {
-      const object = (this.objectType == "company")
-        ? "companies"
-        : `${this.objectType}s`;
-      const params = this.getObjectParams(object);
+      const object =
+        this.objectType == "company"
+          ? "companies"
+          : `${this.objectType}s`;
+      const params = this.getObjectParams(object, after);
       await this.searchCRM(params, after);
     },
   },
+  sampleEmit,
 };

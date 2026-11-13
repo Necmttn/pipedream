@@ -3,8 +3,13 @@ import klaviyo from "../../klaviyo.app.mjs";
 export default {
   key: "klaviyo-create-new-list",
   name: "Create New List",
-  description: "Creates a new list in an account. [See the docs here](https://developers.klaviyo.com/en/v1-2/reference/create-list)",
-  version: "0.0.1",
+  description: "Creates a new list in an account. [See the documentation](https://developers.klaviyo.com/en/reference/create_list)",
+  version: "0.0.5",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     klaviyo,
@@ -15,18 +20,17 @@ export default {
       ],
     },
   },
-  methods: {
-    getSummary() {
-      return `"${this.listName}" successfully created!`;
-    },
-  },
   async run({ $ }) {
-    const { listName } = this;
     const response = await this.klaviyo.newList({
-      listName,
+      data: {
+        type: "list",
+        attributes: {
+          name: this.listName,
+        },
+      },
     });
 
-    $.export("$summary", response || this.getSummary(response));
-    return response;
+    $.export("$summary", `"${this.listName}" successfully created!`);
+    return response.body;
   },
 };

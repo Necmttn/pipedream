@@ -1,4 +1,4 @@
-import component from "../../../slack/actions/list-users/list-users.mjs";
+import component from "@pipedream/slack/actions/list-users/list-users.mjs";
 import utils from "../../common/utils.mjs";
 
 /* eslint-disable pipedream/required-properties-type */
@@ -10,6 +10,6 @@ export default {
     component,
   }),
   key: "slack_bot-list-users",
-  description: "Return a list of all users in a workspace (Bot). [See docs here](https://api.slack.com/methods/users.list)",
-  version: "0.0.2",
+  description: "Return a list of all users in a workspace (Bot). [See the documentation](https://api.slack.com/methods/users.list)",
+  version: "0.0.5",
 };

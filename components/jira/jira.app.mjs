@@ -1,6 +1,7 @@
 import {
   ConfigurationError, axios,
 } from "@pipedream/platform";
+import constants from "./common/constants.mjs";
 
 export default {
   type: "app",
@@ -9,7 +10,7 @@ export default {
     cloudId: {
       type: "string",
       label: "Cloud ID",
-      description: "The cloud ID.",
+      description: "The Jira Cloud site ID (for example, `11223344-a1b2-3b33-c444-def123456789`). Use **Get Cloud ID** to discover IDs. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/#3-1-get-the-cloudid-for-your-site)",
       useQuery: true,
       async options() {
         const clouds = await this.getClouds();
@@ -23,7 +24,7 @@ export default {
     projectID: {
       type: "string",
       label: "Project ID",
-      description: "The project ID.",
+      description: "The project ID",
       useQuery: true,
       async options({
         prevContext, query, cloudId,
@@ -55,16 +56,20 @@ export default {
     issueType: {
       type: "string",
       label: "Issue Type",
-      description: "An ID identifying the type of issue, [Check the API docs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-post) to see available options",
+      description: "An ID identifying the type of issue. [Check the API docs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-post) to see available options",
       async options({
         cloudId, projectId,
       }) {
-        const issueTypes = await this.getProjectIssueTypes({
-          cloudId,
-          params: {
-            projectId,
-          },
-        });
+        const issueTypes = isNaN(projectId)
+          ? await this.getUserIssueTypes({
+            cloudId,
+          })
+          : await this.getProjectIssueTypes({
+            cloudId,
+            params: {
+              projectId,
+            },
+          });
         return issueTypes.map(({
           name: label, id: value,
         }) => ({
@@ -85,18 +90,41 @@ export default {
     },
     issueIdOrKey: {
       type: "string",
-      label: "Issue id or key",
-      description: "The ID or key of the issue where the attachment will be added to.",
+      label: "Issue ID or Key",
+      description: "The ID or key of an issue",
+      useQuery: true,
       async options({
-        prevContext, cloudId,
+        prevContext, query, cloudId, tasksOnly = false,
       }) {
         let { startAt } = prevContext || {};
         const pageSize = 50;
-        const resp = await this.getIssues({
+        const clauses = [
+          "project is not EMPTY",
+        ];
+        if (tasksOnly) {
+          clauses.push("issuetype = \"Task\"");
+        }
+        if (query) {
+          // Sends `(issuekey = "<q>" OR text ~ "<q>*")`.
+          // Purely numeric queries also send `id = <q>`.
+          const escaped = query.replace(/["\\]/g, "\\$&");
+          const subClauses = [
+            `issuekey = "${escaped}"`,
+            `text ~ "${escaped}*"`,
+          ];
+          if (/^\d+$/.test(query)) {
+            subClauses.unshift(`id = ${query}`);
+          }
+          clauses.push(`(${subClauses.join(" OR ")})`);
+        }
+        const jql = `${clauses.join(" AND ")} ORDER BY created DESC`;
+        const resp = await this.searchIssues({
           cloudId,
           params: {
+            jql,
             startAt,
             maxResults: pageSize,
+            fields: "id,key",
           },
         });
         startAt = startAt > 0
@@ -115,7 +143,7 @@ export default {
     },
     accountId: {
       type: "string",
-      label: "Assignee Id",
+      label: "Assignee ID",
       description: "The account ID of the user, which uniquely identifies the user across all Atlassian products, For example, `5b10ac8d82e05b22cc7d4ef5`",
       useQuery: true,
       async options({
@@ -123,7 +151,7 @@ export default {
       }) {
         let { startAt } = prevContext || {};
         const pageSize = 50;
-        const resp = await this.getUsers({
+        const resp = await this.findUsers({
           cloudId,
           params: {
             startAt,
@@ -148,7 +176,7 @@ export default {
     properties: {
       type: "string",
       label: "Properties",
-      description: "A list of properties.",
+      description: "A list of properties",
       optional: true,
     },
     expand: {
@@ -165,13 +193,13 @@ export default {
     additionalProperties: {
       type: "object",
       label: "Additional properties",
-      description: "Extra properties of any type may be provided to this object.",
+      description: "Extra properties of any type may be provided to this object",
       optional: true,
     },
     transition: {
       type: "string",
-      label: "Transition",
-      description: "Details of a transition. Required when performing a transition, optional when creating or editing an issue, See `Transition` section of [doc](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-put). Also you can go edit the workflow and choose the Text option instead of the Diagram option. You can see the transition ID in parenthesis.",
+      label: "Transition ID",
+      description: "The string ID of a transition (e.g. `\"11\"`). Required when performing a transition; optional when creating or editing an issue. Use the `id` value returned by the **Get Transitions** action. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-transitions-post).",
       optional: true,
       async options({
         prevContext, issueIdOrKey, cloudId,
@@ -213,8 +241,243 @@ export default {
       description: "List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`. (.i.e for Fields \"fields\": {\"summary\":\"Completed orders still displaying in pending\",\"customfield_10010\":1,}) [see doc](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-put)",
       optional: true,
     },
-  },
+    fieldId: {
+      type: "string",
+      label: "Field ID",
+      description: "The ID of the field",
+      useQuery: true,
+      async options({
+        query,
+        prevContext: {
+          hasMore,
+          startAt = 0,
+        },
+        cloudId,
+        params = {
+          type: [
+            "custom",
+            "system",
+          ],
+        },
+      }) {
+        if (hasMore === false) {
+          return [];
+        }
 
+        const {
+          isLast,
+          values,
+        } = await this.getFieldsPaginated({
+          cloudId,
+          params: {
+            ...params,
+            query,
+            maxResults: constants.DEFAULT_LIMIT,
+            startAt,
+          },
+        });
+
+        return {
+          options: values.map(({
+            id: value, name: label,
+          }) => ({
+            label,
+            value,
+          })),
+          context: {
+            hasMore: !isLast,
+            startAt: startAt + constants.DEFAULT_LIMIT,
+          },
+        };
+      },
+    },
+    contextId: {
+      type: "string",
+      label: "Context ID",
+      description: "The ID of the context",
+      async options({
+        prevContext: {
+          hasMore,
+          startAt = 0,
+        },
+        cloudId,
+        fieldId,
+        params = {
+          isAnyIssueType: true,
+        },
+      }) {
+        if (hasMore === false) {
+          return [];
+        }
+
+        const {
+          isLast,
+          values,
+        } = await this.getCustomFieldContexts({
+          cloudId,
+          fieldId,
+          params: {
+            ...params,
+            startAt,
+            maxResults: constants.DEFAULT_LIMIT,
+          },
+        });
+        return {
+          options: values.map(({
+            id: value, name: label,
+          }) => ({
+            label,
+            value,
+          })),
+          context: {
+            hasMore: !isLast,
+            startAt: startAt + constants.DEFAULT_LIMIT,
+          },
+        };
+      },
+    },
+    boardId: {
+      type: "string",
+      label: "Board ID",
+      description: "The ID of the board",
+      async options({
+        prevContext, cloudId,
+      }) {
+        let { startAt } = prevContext || {};
+        const pageSize = 50;
+        const resp = await this.listBoards({
+          cloudId,
+          params: {
+            startAt,
+            maxResults: pageSize,
+          },
+        });
+        startAt = startAt > 0
+          ? startAt + pageSize
+          : pageSize;
+        return {
+          options: resp?.values?.map(({
+            id: value, name: label,
+          }) => ({
+            label,
+            value,
+          })) ?? [],
+          context: {
+            startAt,
+          },
+        };
+      },
+    },
+    sprintId: {
+      type: "string",
+      label: "Sprint ID",
+      description: "The ID of the sprint",
+      async options({
+        prevContext, cloudId, boardId,
+      }) {
+        if (!boardId) {
+          return [];
+        }
+        let { startAt } = prevContext || {};
+        const pageSize = 50;
+        const resp = await this.listSprints({
+          cloudId,
+          boardId,
+          params: {
+            startAt,
+            maxResults: pageSize,
+          },
+        });
+        startAt = startAt > 0
+          ? startAt + pageSize
+          : pageSize;
+        return {
+          options: resp?.values?.map(({
+            id: value, name: label,
+          }) => ({
+            label,
+            value,
+          })) ?? [],
+          context: {
+            startAt,
+          },
+        };
+      },
+    },
+    epicId: {
+      type: "string",
+      label: "Epic ID",
+      description: "The ID of the epic",
+      async options({
+        prevContext, cloudId, boardId,
+      }) {
+        if (!boardId) {
+          return [];
+        }
+        let { startAt } = prevContext || {};
+        const pageSize = 50;
+        const resp = await this.listEpics({
+          cloudId,
+          boardId,
+          params: {
+            startAt,
+            maxResults: pageSize,
+          },
+        });
+        return {
+          options: resp?.values?.map(({
+            id: value, name, summary,
+          }) => ({
+            value,
+            label: name || summary || value,
+          })) ?? [],
+          context: {
+            startAt: startAt > 0
+              ? startAt + pageSize
+              : pageSize,
+          },
+        };
+      },
+    },
+    commentId: {
+      type: "string",
+      label: "Comment ID",
+      description: "The ID of the comment",
+      async options({
+        prevContext, issueIdOrKey, cloudId,
+      }) {
+        if (!issueIdOrKey) {
+          return [];
+        }
+        let { startAt } = prevContext || {};
+        const pageSize = 50;
+        try {
+          const resp = await this.listIssueComments({
+            issueIdOrKey,
+            cloudId,
+            params: {
+              startAt,
+              maxResults: pageSize,
+            },
+          });
+          startAt = startAt > 0
+            ? startAt + pageSize
+            : pageSize;
+          return {
+            options: resp?.comments?.map((comment) => ({
+              value: comment.id,
+              label: comment.body?.content[0]?.content[0]?.text || comment.id,
+            })),
+            context: {
+              startAt,
+            },
+          };
+        } catch {
+          return [];
+        }
+      },
+    },
+  },
   methods: {
     _getHeaders(headers = {}) {
       return {
@@ -227,6 +490,18 @@ export default {
     },
     _getUrl(cloudId) {
       return `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3`;
+    },
+    _getAgileUrl(cloudId) {
+      return `https://api.atlassian.com/ex/jira/${cloudId}/rest/agile/1.0`;
+    },
+    _makeAgileRequest({
+      $ = this, path, headers, cloudId, ...args
+    } = {}) {
+      return axios($, {
+        url: `${this._getAgileUrl(cloudId)}${path}`,
+        headers: this._getHeaders(headers),
+        ...args,
+      });
     },
     _makeRequest({
       $ = this, url, path, headers, cloudId, ...args
@@ -257,7 +532,7 @@ export default {
       });
       if (response?.webhookRegistrationResult[0]?.errors) {
         throw new ConfigurationError(`Cannot create the webhook trigger because Jira only allows one active webhook at a time. This is most likely because you have an existing Jira webhook running in another workflow. You can reuse your existing source in your workflow or deactivate the existing source and try again.
-        
+
         Error detail:
         Could not create trigger(s). ${response.webhookRegistrationResult[0].errors}`);
       }
@@ -276,6 +551,18 @@ export default {
           webhookIds: [
             hookId,
           ],
+        },
+      });
+    },
+    refreshHooks({
+      cloudId, hookIds,
+    } = {}) {
+      return this._makeRequest({
+        cloudId,
+        method: "PUT",
+        path: "/webhook/refresh",
+        data: {
+          webhookIds: hookIds,
         },
       });
     },
@@ -305,6 +592,39 @@ export default {
         cloudId,
         method: "POST",
         path: `/issue/${issueIdOrKey}/attachments`,
+        ...args,
+      });
+    },
+    /**
+     * Get the metadata for an attachment
+     * @param {object} args - Arguments object
+     * @param {string} args.attachmentId - The ID of the attachment
+     * @param {string} [args.cloudId] - The cloud ID of the Jira site
+     * @param {object} [args.$] - Pipedream step object, for request/response debug info
+     * @returns {Promise<object>} The attachment metadata (e.g. `id`, `filename`, `mimeType`)
+     */
+    getAttachmentMetadata({
+      attachmentId, ...args
+    } = {}) {
+      return this._makeRequest({
+        path: `/attachment/${attachmentId}`,
+        ...args,
+      });
+    },
+    /**
+     * Get the binary content of an attachment
+     * @param {object} args - Arguments object
+     * @param {string} args.attachmentId - The ID of the attachment
+     * @param {string} [args.cloudId] - The cloud ID of the Jira site
+     * @param {object} [args.$] - Pipedream step object, for request/response debug info
+     * @returns {Promise<import("stream").Readable>} A readable stream of the attachment content
+     */
+    getAttachmentContent({
+      attachmentId, ...args
+    } = {}) {
+      return this._makeRequest({
+        path: `/attachment/content/${attachmentId}`,
+        responseType: "stream",
         ...args,
       });
     },
@@ -352,9 +672,37 @@ export default {
         ...args,
       });
     },
-    getUsers(args = {}) {
+    getDefaultLimit() {
+      return constants.DEFAULT_LIMIT;
+    },
+    findUsers({
+      params, ...args
+    } = {}) {
       return this._makeRequest({
-        path: "/users/search",
+        path: "/user/search",
+        params: {
+          maxResults: constants.DEFAULT_LIMIT,
+          ...params,
+        },
+        ...args,
+      });
+    },
+    /**
+     * Lists the users that can be assigned to issues in a project
+     * @param {object} args - Arguments object
+     * @param {string} args.cloudId - The cloud ID of the Jira site
+     * @param {object} [args.params] - Query params, e.g. `project`, `query`, `startAt`
+     * @returns {Promise<object[]>} The assignable users
+     */
+    findAssignableUsers({
+      params, ...args
+    } = {}) {
+      return this._makeRequest({
+        path: "/user/assignable/search",
+        params: {
+          maxResults: constants.DEFAULT_LIMIT,
+          ...params,
+        },
         ...args,
       });
     },
@@ -366,9 +714,9 @@ export default {
         ...args,
       });
     },
-    getIssues(args = {}) {
+    searchIssues(args = {}) {
       return this._makeRequest({
-        path: "/search",
+        path: "/search/jql",
         ...args,
       });
     },
@@ -439,23 +787,15 @@ export default {
         ...args,
       });
     },
-    getEditIssueMetadata({
-      issueIdOrKey, ...args
-    } = {}) {
-      return this._makeRequest({
-        path: `/issue/${issueIdOrKey}/editmeta`,
-        ...args,
-      });
-    },
-    getCreateIssueMetadata(args = {}) {
-      return this._makeRequest({
-        path: "/issue/createmeta",
-        ...args,
-      });
-    },
     getProjectIssueTypes(args = {}) {
       return this._makeRequest({
         path: "/issuetype/project",
+        ...args,
+      });
+    },
+    getUserIssueTypes(args = {}) {
+      return this._makeRequest({
+        path: "/issuetype",
         ...args,
       });
     },
@@ -473,6 +813,152 @@ export default {
         },
         ...args,
       });
+    },
+    getFieldsPaginated(args = {}) {
+      return this._makeRequest({
+        path: "/field/search",
+        ...args,
+      });
+    },
+    getCustomFieldContexts({
+      fieldId, ...args
+    } = {}) {
+      return this._makeRequest({
+        path: `/field/${fieldId}/context`,
+        ...args,
+      });
+    },
+    countIssuesUsingJQL({
+      cloudId, ...args
+    } = {}) {
+      return this._makeRequest({
+        cloudId,
+        method: "POST",
+        path: "/search/approximate-count",
+        ...args,
+      });
+    },
+    checkIssuesAgainstJQL({
+      cloudId, ...args
+    } = {}) {
+      return this._makeRequest({
+        cloudId,
+        method: "POST",
+        path: "/jql/match",
+        ...args,
+      });
+    },
+    postSearchIssues({
+      cloudId, ...args
+    } = {}) {
+      return this._makeRequest({
+        cloudId,
+        method: "POST",
+        path: "/search/jql",
+        ...args,
+      });
+    },
+    getIssuePickerSuggestions({
+      cloudId, ...args
+    } = {}) {
+      return this._makeRequest({
+        cloudId,
+        path: "/issue/picker",
+        ...args,
+      });
+    },
+    listBoards(args = {}) {
+      return this._makeAgileRequest({
+        path: "/board",
+        ...args,
+      });
+    },
+    getBoard({
+      boardId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/board/${boardId}`,
+        ...args,
+      });
+    },
+    listBoardIssues({
+      boardId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/board/${boardId}/issue`,
+        ...args,
+      });
+    },
+    listSprints({
+      boardId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/board/${boardId}/sprint`,
+        ...args,
+      });
+    },
+    getSprint({
+      sprintId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/sprint/${sprintId}`,
+        ...args,
+      });
+    },
+    listSprintIssues({
+      sprintId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/sprint/${sprintId}/issue`,
+        ...args,
+      });
+    },
+    moveIssuesToSprint({
+      sprintId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        method: "POST",
+        path: `/sprint/${sprintId}/issue`,
+        ...args,
+      });
+    },
+    createSprint(args = {}) {
+      return this._makeAgileRequest({
+        method: "POST",
+        path: "/sprint",
+        ...args,
+      });
+    },
+    listEpics({
+      boardId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/board/${boardId}/epic`,
+        ...args,
+      });
+    },
+    listEpicIssues({
+      boardId, epicId, ...args
+    } = {}) {
+      return this._makeAgileRequest({
+        path: `/board/${boardId}/epic/${epicId}/issue`,
+        ...args,
+      });
+    },
+    getServerInfo({
+      cloudId, ...args
+    } = {}) {
+      return this._makeRequest({
+        cloudId,
+        path: "/serverInfo",
+        ...args,
+      });
+    },
+    async getCloudBaseUrl(cloudId) {
+      const { baseUrl } = await this.getServerInfo({
+        cloudId,
+      });
+      return baseUrl;
     },
     async *getResourcesStream({
       cloudId,

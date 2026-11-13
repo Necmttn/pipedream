@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/yotpo",
-  "version": "0.3.5",
+  "version": "0.3.8",
   "description": "Pipedream Yotpo Components",
-  "main": "yotpo.app.js",
+  "main": "yotpo.app.mjs",
   "keywords": [
     "pipedream",
     "yotpo"
@@ -10,7 +10,7 @@
   "homepage": "https://pipedream.com/apps/yotpo",
   "author": "Pipedream <support@pipedream.com> (https://pipedream.com/)",
   "dependencies": {
-    "axios": "^0.21.1",
+    "axios": "^1.20.0",
     "lodash.get": "^4.4.2"
   },
   "gitHead": "e12480b94cc03bed4808ebc6b13e7fdb3a1ba535",

@@ -4,7 +4,12 @@ export default {
   key: "raindrop-save",
   name: "Save to Raindrop Collection",
   description: "Receive a link and save it into a specified collection. [See docs](https://developer.raindrop.io/v1/raindrops/single)",
-  version: "1.2.1",
+  version: "1.2.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     raindrop,

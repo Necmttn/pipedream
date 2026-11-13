@@ -3,8 +3,13 @@ import postgresql from "../../postgresql.app.mjs";
 export default {
   name: "Find Row With Custom Query",
   key: "postgresql-find-row-custom-query",
-  description: "Finds a row in a table via a custom query. [See Docs](https://node-postgres.com/features/queries)",
-  version: "0.0.7",
+  description: "Finds a row in a table via a custom query. [See the documentation](https://node-postgres.com/features/queries)",
+  version: "2.0.9",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     postgresql,
@@ -20,18 +25,11 @@ export default {
         "values",
       ],
     },
-    rejectUnauthorized: {
-      propDefinition: [
-        postgresql,
-        "rejectUnauthorized",
-      ],
-    },
   },
   async run({ $ }) {
     const {
       query,
       values = [],
-      rejectUnauthorized,
     } = this;
 
     if (!Array.isArray(values)) {
@@ -49,18 +47,12 @@ export default {
       throw new Error("Need be a `SELECT` statement query. Read more about [SELECT queries here](https://www.w3schools.com/sql/sql_select.asp)");
     }
 
-    try {
-      const res = await this.postgresql.executeQuery({
-        text: query,
-        values,
-      }, rejectUnauthorized);
-      $.export("$summary", "Successfully executed query");
-      return res;
-    } catch (error) {
-      throw new Error(`
-        Query not executed due to an error. ${error}.
-        This could be because SSL verification failed, consider changing the Reject Unauthorized prop and try again.
-      `);
-    }
+    const res = await this.postgresql.executeQuery({
+      text: query,
+      values,
+      errorMsg: "Query not executed due to an error. ",
+    });
+    $.export("$summary", "Successfully executed query");
+    return res;
   },
 };

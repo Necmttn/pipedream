@@ -4,7 +4,12 @@ export default {
   key: "supabase-update-row",
   name: "Update Row",
   type: "action",
-  version: "0.0.3",
+  version: "0.1.6",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   description: "Updates row(s) in a database. [See the docs here](https://supabase.com/docs/reference/javascript/update)",
   props: {
     supabase,
@@ -39,9 +44,7 @@ export default {
   },
   async run({ $ }) {
     const response = await this.supabase.updateRow(this.table, this.column, this.value, this.data);
-    if (response) {
-      $.export("$summary", `Successfully updated ${response.length} row(s) from table ${this.table}`);
-    }
+    $.export("$summary", `Successfully updated ${response.length} row(s) from table ${this.table}`);
     return response;
   },
 };

@@ -2,7 +2,12 @@ import app from "../../kanban_tool.app.mjs";
 
 export default {
   key: "kanban_tool-get-task-details",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   name: "Get Task Details",
   description: "Gets details of a selected task [See the docs here](https://kanbantool.com/developer/api-v3#fetching-tasks)",
@@ -29,7 +34,7 @@ export default {
       $,
       taskId: this.taskId,
     });
-    $.export("$summary", `The task(ID: ${resp.id}) details has been retreived.`);
+    $.export("$summary", `Task(ID: ${resp.id}) details retrieved`);
     return resp;
   },
 };

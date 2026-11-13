@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/dayschedule",
-  "version": "0.0.2",
+  "version": "0.2.0",
   "description": "Pipedream DaySchedule Components",
   "main": "dayschedule.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.5.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

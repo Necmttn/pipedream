@@ -1,6 +1,7 @@
 const VERSION_PATH = "rest";
 const BASE_URL = "https://api.linkedin.com/";
-const VERSION_HEADER = "202309";
+const VERSION_HEADER = "202610";
+const RESTLI_PROTOCOL_VERSION = "2.0.0";
 
 const VISIBILITIES = [
   {
@@ -75,14 +76,28 @@ const ROLE_STATES = [
   "REVOKED",
 ];
 
+const DEFAULT_LIMIT = 20;
+const DEFAULT_MAX = 100;
+const IS_FIRST_RUN = "isFirstRun";
+const LAST_DATE_AT = "lastDateAt";
+const ORG_ID = "orgId";
+const PERSON_ID = "personId";
+
 export default {
   VERSION_PATH,
   BASE_URL,
   VERSION_HEADER,
+  RESTLI_PROTOCOL_VERSION,
   VISIBILITIES,
   TYPES,
   TIME_GRANULARITY_OPTIONS,
   PIVOT_OPTIONS,
   ORGANIZATION_ROLES,
   ROLE_STATES,
+  DEFAULT_LIMIT,
+  DEFAULT_MAX,
+  IS_FIRST_RUN,
+  LAST_DATE_AT,
+  ORG_ID,
+  PERSON_ID,
 };

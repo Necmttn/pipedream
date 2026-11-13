@@ -1,16 +1,24 @@
-import googleDrive from "../../google_drive.app.mjs";
-import path from "path";
 import {
-  getFileStream,
+  ConfigurationError,
+  getFileStreamAndMetadata,
+} from "@pipedream/platform";
+import { GOOGLE_DRIVE_UPLOAD_TYPE_MULTIPART } from "../../common/constants.mjs";
+import {
   omitEmptyStringValues,
+  parseObjectEntries,
 } from "../../common/utils.mjs";
-import { GOOGLE_DRIVE_UPLOAD_TYPE_MULTIPART } from "../../constants.mjs";
+import googleDrive from "../../google_drive.app.mjs";
 
 export default {
   key: "google_drive-upload-file",
   name: "Upload File",
-  description: "Copy an existing file to Google Drive. [See the docs](https://developers.google.com/drive/api/v3/manage-uploads) for more information",
-  version: "0.1.3",
+  description: "Upload a file to Google Drive. [See the documentation](https://developers.google.com/drive/api/v3/manage-uploads) for more information",
+  version: "2.0.22",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     googleDrive,
@@ -33,17 +41,11 @@ export default {
         "The folder you want to upload the file to. If not specified, the file will be placed directly in the drive's top-level folder.",
       optional: true,
     },
-    fileUrl: {
-      propDefinition: [
-        googleDrive,
-        "fileUrl",
-      ],
-    },
     filePath: {
-      propDefinition: [
-        googleDrive,
-        "filePath",
-      ],
+      type: "string",
+      label: "File Path or URL",
+      description: "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf).",
+      format: "file-ref",
     },
     name: {
       propDefinition: [
@@ -75,32 +77,45 @@ export default {
         "fileId",
       ],
       label: "File to replace",
-      description: "Id of the file to replace. Leave it empty to upload a new file.",
+      description: "ID of the file to replace. Leave it empty to upload a new file.",
+      optional: true,
+    },
+    metadata: {
+      type: "object",
+      label: "Metadata",
+      description: "Additional metadata to supply in the upload. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) for information on available fields. Values will be parsed as JSON where applicable. Example: `{ \"description\": \"my file description\" }`",
+      optional: true,
+    },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
       optional: true,
     },
   },
   async run({ $ }) {
     const {
       parentId,
-      fileUrl,
       filePath,
       name,
       mimeType,
     } = this;
     let { uploadType } = this;
-    if (!fileUrl && !filePath) {
-      throw new Error("One of File URL and File Path is required.");
-    }
     const driveId = this.googleDrive.getDriveId(this.drive);
 
-    const filename = name || path.basename(fileUrl || filePath);
+    const {
+      stream: file, metadata: fileMetadata,
+    } = await getFileStreamAndMetadata(filePath);
 
-    const file = await getFileStream({
-      $,
-      fileUrl,
-      filePath,
-    });
-    console.log(`Upload type: ${uploadType}.`);
+    const filename = name || fileMetadata.name;
+
+    const metadata = this.metadata
+      ? parseObjectEntries(this.metadata)
+      : undefined;
+
+    if (metadata?.mimeType && !mimeType) {
+      throw new ConfigurationError(`Please include the file's original MIME type in the \`Mime Type\` prop. File will be converted to \`${metadata.mimeType}\`.`);
+    }
 
     let result = null;
     if (this.fileId) {
@@ -112,6 +127,7 @@ export default {
         name: filename,
         mimeType,
         uploadType,
+        requestBody: metadata,
       }));
       $.export("$summary", `Successfully updated file, "${result.name}"`);
     } else {
@@ -122,6 +138,7 @@ export default {
         parentId,
         driveId,
         uploadType,
+        requestBody: metadata,
       }));
       $.export("$summary", `Successfully uploaded a new file, "${result.name}"`);
     }

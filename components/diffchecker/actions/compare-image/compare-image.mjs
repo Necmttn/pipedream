@@ -1,13 +1,17 @@
 import FormData from "form-data";
-import fs from "fs";
-import { checkTmp } from "../../common/utils.mjs";
+import { getFileStreamAndMetadata } from "@pipedream/platform";
 import diffchecker from "../../diffchecker.app.mjs";
 
 export default {
   key: "diffchecker-compare-image",
   name: "Compare Image",
   description: "Compares two images and returns the result.",
-  version: "0.0.1",
+  version: "1.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
   props: {
     diffchecker,
@@ -28,6 +32,12 @@ export default {
       reloadProps: true,
       optional: true,
     },
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
+    },
   },
   async additionalProps() {
     const props = {};
@@ -41,8 +51,8 @@ export default {
         description += "Provide Data Image URI [Click here for further information](https://en.wikipedia.org/wiki/Data_URI_scheme).";
         break;
       case "form" :
-        label = "Path";
-        description += "Provide the file path `/tmp/file.png`. [See the documentation](https://pipedream.com/docs/workflows/steps/code/nodejs/working-with-files/#the-tmp-directory).";
+        label = "(File Path Or Url)";
+        description += "Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/example.jpg`).";
         break;
       }
 
@@ -50,27 +60,50 @@ export default {
         type: "string",
         label: `Left Image ${label}`,
         description: `Left ${description}`,
+        ...(this.inputType === "form" && {
+          format: "file-ref",
+        }),
       };
       props.rightImage = {
         type: "string",
         label: `Right Image ${label}`,
         description: `Right ${description}`,
+        ...(this.inputType === "form" && {
+          format: "file-ref",
+        }),
       };
     }
     return props;
   },
   async run({ $ }) {
     let formData = new FormData();
-    const leftFilepath = checkTmp(this.leftImage);
-    const rightFilepath = checkTmp(this.rightImage);
     const objToSend = {
       inputType: this.inputType,
       outputType: "json",
     };
+
+    let leftStream;
+    let rightStream;
+
     switch (this.inputType) {
     case "form" :
-      formData.append("left_image", fs.createReadStream(leftFilepath));
-      formData.append("right_image", fs.createReadStream(rightFilepath));
+      [
+        leftStream,
+        rightStream,
+      ] = await Promise.all([
+        getFileStreamAndMetadata(this.leftImage),
+        getFileStreamAndMetadata(this.rightImage),
+      ]);
+      formData.append("left_image", leftStream.stream, {
+        contentType: leftStream.metadata.contentType,
+        knownLength: leftStream.metadata.size,
+        filename: leftStream.metadata.name,
+      });
+      formData.append("right_image", rightStream.stream, {
+        contentType: rightStream.metadata.contentType,
+        knownLength: rightStream.metadata.size,
+        filename: rightStream.metadata.name,
+      });
       objToSend.data = formData;
       objToSend.headers = formData.getHeaders();
       break;

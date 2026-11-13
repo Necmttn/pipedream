@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/mailmodo",
-  "version": "0.0.2",
+  "version": "0.2.1",
   "description": "Pipedream Mailmodo Components",
   "main": "mailmodo.app.mjs",
   "keywords": [
@@ -10,7 +10,7 @@
   "homepage": "https://pipedream.com/apps/mailmodo",
   "author": "Pipedream <support@pipedream.com> (https://pipedream.com/)",
   "dependencies": {
-    "@pipedream/platform": "^1.4.0"
+    "@pipedream/platform": "^1.6.8"
   },
   "publishConfig": {
     "access": "public"

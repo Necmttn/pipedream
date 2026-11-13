@@ -4,8 +4,14 @@ export default {
   key: "activecampaign-create-deal",
   name: "Create Deal",
   description: "Creates a new deal. See the docs [here](https://developers.activecampaign.com/reference/create-a-deal-new).",
-  version: "0.2.0",
+  version: "0.2.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     activecampaign,
     title: {

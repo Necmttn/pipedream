@@ -1,12 +1,17 @@
 import youtubeDataApi from "../../youtube_data_api_custom_app.app.mjs";
-import common from "../../../youtube_data_api/actions/upload-thumbnail/common.mjs";
+import common from "@pipedream/youtube_data_api/actions/upload-thumbnail/common.mjs";
 
 export default {
   ...common,
   key: "youtube_data_api_custom_app-upload-thumbnail",
   name: "Upload Thumbnail",
   description: "Uploads a custom video thumbnail to YouTube and sets it for a video. [See the docs](https://developers.google.com/youtube/v3/docs/thumbnails/set) for more information",
-  version: "0.0.1",
+  version: "0.0.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     youtubeDataApi,
@@ -37,5 +42,11 @@ export default {
       ],
     },
     ...common.props,
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
+    },
   },
 };

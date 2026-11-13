@@ -1,10 +1,16 @@
 import common from "../common/comment-props.mjs";
 
 export default {
+  ...common,
   key: "clickup-update-comment",
   name: "Update Comment",
-  description: "Updates a comment. See the docs [here](https://clickup.com/api) in **Comments / Update Comment** section.",
-  version: "0.0.9",
+  description: "Updates a comment. [See the documentation](https://clickup.com/api) in **Comments / Update Comment** section.",
+  version: "0.0.14",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     ...common.props,

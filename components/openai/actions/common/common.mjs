@@ -1,4 +1,8 @@
-import { ConfigurationError } from "@pipedream/platform";
+import {
+  ConfigurationError, getFileStreamAndMetadata,
+} from "@pipedream/platform";
+import constants from "../../common/constants.mjs";
+import { parse } from "../../common/helpers.mjs";
 
 const CHAT_DOCS_MESSAGE_FORMAT_URL = "https://platform.openai.com/docs/guides/chat/introduction";
 
@@ -55,10 +59,9 @@ export default {
   },
   methods: {
     _getCommonArgs() {
-      return {
+      const args = {
         model: this.modelId,
         prompt: this.prompt,
-        max_tokens: this.maxTokens,
         temperature: this.temperature
           ? +this.temperature
           : this.temperature,
@@ -76,18 +79,58 @@ export default {
         best_of: this.bestOf,
         user: this.user,
       };
+      if (this.modelId.startsWith("o1") || this.modelId.startsWith("o3") || this.modelId.startsWith("o4")) {
+        args.max_completion_tokens = this.maxTokens;
+      } else {
+        args.max_tokens = this.maxTokens;
+      }
+      return args;
     },
-    _getUserMessageContent() {
+    async _getUserMessageContent() {
       let content = [];
       if (this.images) {
         for (const image of this.images) {
+          let base64Image = image;
+          let imageType = "image/jpeg";
+          if (image.startsWith("http") || image.includes("tmp/")) {
+            const {
+              stream, metadata,
+            } = await getFileStreamAndMetadata(image);
+            const chunks = [];
+            for await (const chunk of stream) {
+              chunks.push(chunk);
+            }
+            base64Image = Buffer.concat(chunks).toString("base64");
+            if (metadata.contentType) imageType = metadata.contentType;
+          }
           content.push({
             "type": "image_url",
             "image_url": {
-              "url": image,
+              "url": base64Image.startsWith("data:")
+                ? base64Image
+                : `data:${imageType};base64,${base64Image}`,
             },
           });
         }
+      }
+
+      if (this.audio) {
+        const {
+          stream, metadata,
+        } = await getFileStreamAndMetadata(this.audio);
+        const chunks = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        const fileContent = Buffer.concat(chunks).toString("base64");
+        const extension = metadata.name.split(".").pop();
+        content.push({
+          type: "input_audio",
+          input_audio: {
+            data: fileContent,
+            format: extension,
+          },
+        });
       }
 
       content.push({
@@ -97,7 +140,7 @@ export default {
 
       return content;
     },
-    _getChatArgs() {
+    async _getChatArgs() {
       if (this.messages && this.messages.length && !this.userMessage) {
         throw new ConfigurationError(
           `When you provide previous messages, you must provide the next User Message for the assistant to answer. See the OpenAI Chat format docs here: ${CHAT_DOCS_MESSAGE_FORMAT_URL}`,
@@ -143,14 +186,22 @@ export default {
 
       messages.push({
         "role": "user",
-        "content": this._getUserMessageContent(),
+        "content": await this._getUserMessageContent(),
       });
 
       const responseFormat = {};
 
+      const jsonSchemaObj =
+        this.responseFormat === constants.CHAT_RESPONSE_FORMAT.JSON_SCHEMA.value
+          ? {
+            json_schema: parse(this.jsonSchema),
+          }
+          : {};
+
       if (this.modelId != "gpt-4-vision-preview") {
         responseFormat["response_format"] = {
           type: this.responseFormat,
+          ...jsonSchemaObj,
         };
       }
 

@@ -1,8 +1,8 @@
-import stripe from "../../stripe.app.mjs";
+import app from "../../stripe.app.mjs";
 
 export default {
   props: {
-    stripe,
+    app,
     http: {
       type: "$.interface.http",
       customResponse: true,
@@ -14,9 +14,12 @@ export default {
       throw new Error("getEvent method is not implemented");
     },
     emitEvent(event) {
+      const idText = event.data.object?.id ?
+        `object ID ${event.data.object.id}` :
+        `event ID ${event.id}`;
       this.$emit(event, {
         id: event.id,
-        summary: `New event ${event.type} with ID ${event.data.id}`,
+        summary: `New event ${event.type} (${idText})`,
         ts: Date.parse(event.created),
       });
     },
@@ -39,14 +42,14 @@ export default {
         "*",
       ];
 
-      const endpoint = await this.stripe.sdk().webhookEndpoints.create({
+      const endpoint = await this.app.sdk().webhookEndpoints.create({
         url: this.http.endpoint,
         enabled_events: enabledEvents,
       });
       this.db.set("endpoint", JSON.stringify(endpoint));
 
       for (const eventType of enabledEvents) {
-        const events = await this.stripe.getEvents({
+        const events = await this.app.getEvents({
           eventType,
         });
 
@@ -59,7 +62,7 @@ export default {
       const endpoint = this.getEndpoint();
       this.db.set("endpoint", null);
       if (!endpoint) return;
-      const confirmation = await this.stripe.sdk().webhookEndpoints.del(endpoint.id);
+      const confirmation = await this.app.sdk().webhookEndpoints.del(endpoint.id);
       if ("deleted" in confirmation && !confirmation.deleted) {
         throw new Error("Webhook endpoint not deleted");
       }
@@ -75,7 +78,7 @@ export default {
     }
     const sig = event.headers["stripe-signature"];
     try {
-      event = this.stripe.sdk().webhooks.constructEvent(event.bodyRaw, sig, endpoint.secret);
+      event = this.app.sdk().webhooks.constructEvent(event.bodyRaw, sig, endpoint.secret);
     } catch (err) {
       this.http.respond({
         status: 400,

@@ -3,8 +3,13 @@ import cloudflare from "../../cloudflare_api_key.app.mjs";
 export default {
   key: "cloudflare_api_key-revoke-certificate",
   name: "Revoke Certificate",
-  description: "Revoke an existing Origin CA certificate by its serial number. [See the docs here](https://api.cloudflare.com/#origin-ca-revoke-certificate)",
-  version: "0.0.3",
+  description: "Revoke an existing Origin CA certificate by its serial number. [See the documentation](https://developers.cloudflare.com/api/node/resources/origin_ca_certificates/methods/delete/)",
+  version: "0.0.6",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     cloudflare,
@@ -25,10 +30,13 @@ export default {
     },
   },
   async run({ $ }) {
-    const certificateID = this.certificateIdentifier;
+    const {
+      cloudflare,
+      certificateIdentifier,
+    } = this;
 
-    const response = await this.cloudflare.revokeCertificate(certificateID);
-    $.export("$summary", `Successfully revoked certificate with ID ${response.result.id}`);
+    const response = await cloudflare.revokeCertificate(certificateIdentifier);
+    $.export("$summary", `Successfully revoked certificate with ID \`${response.result.id}\``);
 
     return response;
   },

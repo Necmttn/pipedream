@@ -1,10 +1,16 @@
+import { ADDRESS_TYPE_OPTIONS } from "../../common/constants.mjs";
 import { prepareData } from "../../common/utils.mjs";
 import constantContact from "../../constant_contact.app.mjs";
 
 export default {
   key: "constant_contact-add-contact",
   name: "Add Contact",
-  version: "0.0.2",
+  version: "0.0.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   description: "Add a single contact. [See the documentation](https://developer.constantcontact.com/api_reference/index.html#!/Contacts/createContact)",
   type: "action",
   props: {
@@ -154,11 +160,7 @@ export default {
         type: "string",
         label: `Address Kind ${i + 1}`,
         description: `The kind of the address ${i + 1}.`,
-        options: [
-          "home",
-          "work",
-          "other",
-        ],
+        options: ADDRESS_TYPE_OPTIONS,
       };
       props[`streetAddressStreet_${i}`] = {
         type: "string",

@@ -1,16 +1,18 @@
 {
   "name": "@pipedream/retool",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Pipedream Retool Components",
-  "main": "dist/app/retool.app.mjs",
+  "main": "retool.app.mjs",
   "keywords": [
     "pipedream",
     "retool"
   ],
-  "files": ["dist"],
   "homepage": "https://pipedream.com/apps/retool",
   "author": "Pipedream <support@pipedream.com> (https://pipedream.com/)",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@pipedream/platform": "^3.1.1"
   }
 }

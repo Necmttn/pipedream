@@ -1,34 +1,57 @@
-import fs from "fs";
-import path from "path";
 import constants from "./constants.mjs";
+import { getFileStreamAndMetadata } from "@pipedream/platform";
+
+function optionalParseAsJSON(value) {
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    return value;
+  }
+}
 
 export default {
-  isValidFile(filePath) {
-    const filePathWithTmp = `/tmp/${filePath}`;
-    if (fs.existsSync(filePathWithTmp)) {
-      return filePathWithTmp;
-    } else if (fs.existsSync(filePath)) {
-      return filePath;
+  getFieldsParam(fields) {
+    if (!fields?.length) {
+      return undefined;
     }
-    return false;
+    return Array.isArray(fields)
+      ? fields.join(",")
+      : fields;
   },
-  getFileStream(filePath) {
-    return fs.createReadStream(filePath);
+  parseObjectEntries(value = {}) {
+    const obj = typeof value === "string"
+      ? JSON.parse(value)
+      : value;
+    return Object.fromEntries(
+      Object.entries(obj).map(([
+        key,
+        value,
+      ]) => [
+        key,
+        optionalParseAsJSON(value),
+      ]),
+    );
   },
-  getFileMeta(filePath) {
-    const stats = fs.statSync(filePath);
+  async getFileData(filePath) {
+    const {
+      stream, metadata,
+    } = await getFileStreamAndMetadata(filePath);
     return {
-      attributes: {
-        content_created_at: new Date(stats.ctimeMs).toISOString()
-          .split(".")[0] + "Z",
-        content_modified_at: new Date(stats.mtimeMs).toISOString()
-          .split(".")[0] + "Z",
-        name: path.basename(filePath),
-        parent: {
-          id: 0,
+      fileContent: stream,
+      fileMeta: {
+        attributes: {
+          content_created_at: new Date(metadata.lastModified).toISOString()
+            .split(".")[0] + "Z",
+          content_modified_at: new Date(metadata.lastModified).toISOString()
+            .split(".")[0] + "Z",
+          name: metadata.name,
+          parent: {
+            id: 0,
+          },
         },
+        size: metadata.size,
+        contentType: metadata.contentType,
       },
-      size: stats.size,
     };
   },
   checkRFC3339(dateTimeStr) {

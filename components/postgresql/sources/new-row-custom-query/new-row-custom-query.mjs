@@ -4,8 +4,8 @@ export default {
   ...common,
   name: "New Row Custom Query",
   key: "postgresql-new-row-custom-query",
-  description: "Emit new event when new rows are returned from a custom query that you provide. [See Docs](https://node-postgres.com/features/queries)",
-  version: "0.0.10",
+  description: "Emit new event when new rows are returned from a custom query that you provide. [See the documentation](https://node-postgres.com/features/queries)",
+  version: "2.0.8",
   type: "source",
   dedupe: "unique",
   props: {
@@ -14,9 +14,6 @@ export default {
       propDefinition: [
         common.props.postgresql,
         "schema",
-        (c) => ({
-          rejectUnauthorized: c.rejectUnauthorized,
-        }),
       ],
     },
     table: {
@@ -25,7 +22,6 @@ export default {
         "table",
         (c) => ({
           schema: c.schema,
-          rejectUnauthorized: c.rejectUnauthorized,
         }),
       ],
     },
@@ -36,7 +32,6 @@ export default {
         (c) => ({
           table: c.table,
           schema: c.schema,
-          rejectUnauthorized: c.rejectUnauthorized,
         }),
       ],
     },
@@ -45,12 +40,30 @@ export default {
         common.props.postgresql,
         "query",
       ],
+      description: "Specify the query to select new or updated rows since the last poll. For example, `SELECT * FROM users WHERE country = 'US'`",
     },
     values: {
       propDefinition: [
         common.props.postgresql,
         "values",
       ],
+    },
+  },
+  hooks: {
+    async deploy() {
+      if (this.values && !Array.isArray(this.values)) {
+        throw new Error("No valid values provided. The values property must be an array.");
+      }
+
+      const numberOfValues = this.query?.match(/\$/g)?.length || 0;
+      if (this.values && this.values.length !== numberOfValues) {
+        throw new Error("The number of values provided does not match the number of values in the query.");
+      }
+
+      const isColumnUnique = await this.isColumnUnique(this.schema, this.table, this.column);
+      if (!isColumnUnique) {
+        throw new Error("The column selected contains duplicate values. Column must be unique");
+      }
     },
   },
   methods: {
@@ -64,34 +77,12 @@ export default {
     },
   },
   async run() {
-    const {
-      schema,
-      table,
-      column,
-      query,
-      values = [],
-    } = this;
-
-    if (!Array.isArray(values)) {
-      throw new Error("No valid values provided. The values property must be an array.");
-    }
-
-    const numberOfValues = query?.match(/\$/g)?.length || 0;
-    if (values.length !== numberOfValues) {
-      throw new Error("The number of values provided does not match the number of values in the query.");
-    }
-
-    const isColumnUnique = await this.isColumnUnique(schema, table, column);
-    if (!isColumnUnique) {
-      throw new Error("The column selected contains duplicate values. Column must be unique");
-    }
-
     const rows = await this.postgresql.executeQuery({
-      text: query,
-      values,
-    }, this.rejectUnauthorized);
+      text: this.query,
+      values: this.values,
+    });
     for (const row of rows) {
-      const meta = this.generateMeta(row, column);
+      const meta = this.generateMeta(row, this.column);
       this.$emit(row, meta);
     }
   },

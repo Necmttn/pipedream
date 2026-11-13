@@ -1,8 +1,8 @@
 {
   "name": "@pipedream/spondyr",
-  "version": "0.0.3",
+  "version": "0.1.1",
   "description": "Pipedream Spondyr Components",
-  "main": "spondyr.app.js",
+  "main": "spondyr.app.mjs",
   "keywords": [
     "pipedream",
     "spondyr"
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.2.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

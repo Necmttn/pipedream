@@ -4,8 +4,14 @@ export default {
   name: "Status Find Email",
   description: "Use this Api when you want to know the status of any previous find-email Api request. [See the documentation](https://app2.getemail.io/dash/integration/api/v2/2).",
   key: "getemails-status-find-email",
-  version: "0.0.1",
+  version: "0.0.4",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     app,
     id: {

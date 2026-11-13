@@ -2,10 +2,15 @@ import app from "../../pandadoc.app.mjs";
 
 export default {
   key: "pandadoc-document-details",
-  name: "Document Details",
-  description: "Return detailed data about a document. [See the docs here](https://developers.pandadoc.com/reference/document-details)",
+  name: "Get Document Details",
+  description: "Return detailed data about a document. [See the documentation here](https://developers.pandadoc.com/reference/document-details)",
   type: "action",
-  version: "0.0.6",
+  version: "0.0.9",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   props: {
     app,
     id: {

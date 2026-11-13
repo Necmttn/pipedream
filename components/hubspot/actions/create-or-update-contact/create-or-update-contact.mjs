@@ -1,91 +1,33 @@
 import { OBJECT_TYPE } from "../../common/constants.mjs";
-import common from "../common-create-object.mjs";
+import common from "../common/common-create-object.mjs";
 
 export default {
   ...common,
   key: "hubspot-create-or-update-contact",
   name: "Create or Update Contact",
-  description: "Creates a new contact or updates an existing contact based on email address. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts#endpoint?spec=POST-/crm/v3/objects/contacts)",
-  version: "0.0.8",
+  description:
+    "Create a contact in HubSpot, or update it when one with the same email already exists (enable **Update If Exists**). Put contact fields in **Object Properties** as HubSpot internal names. Example: Object Properties `{ \"email\": \"ada@example.com\", \"firstname\": \"Ada\", \"jobtitle\": \"CTO\" }`. Returns the created or updated contact with its id. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts#endpoint?spec=POST-/crm/v3/objects/contacts)",
+  version: "1.0.2",
+  annotations: {
+    destructiveHint: true,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
-  async additionalProps() {
-    const schema = await this.hubspot.getSchema(this.getObjectType());
-    const { results: properties } = await this.hubspot.getProperties(this.getObjectType());
-    const props = properties
-      .filter(this.isRelevantProperty)
-      .map((property) => this.makePropDefinition(property, schema.requiredProperties))
-      .reduce((p, {
-        name, ...definition
-      }) => {
-        p[name] = definition;
-        return p;
-      }, {});
-    const {
-      email, ...otherProps
-    } = props;
-    return email
-      ? {
-        email,
-        ...otherProps,
-      }
-      : props;
+  ai: "optimized",
+  props: {
+    ...common.props,
+    updateIfExists: {
+      label: "Update If Exists",
+      description:
+        "Set to `true` to update the existing contact instead of failing when HubSpot rejects creation because the contact already exists (error category `CONFLICT` or `OBJECT_ALREADY_EXISTS`). Other creation errors are not retried as updates and still fail. Example: `true`.",
+      type: "boolean",
+    },
   },
   methods: {
     ...common.methods,
     getObjectType() {
       return OBJECT_TYPE.CONTACT;
     },
-    async getContact(email, $) {
-      if (!email) {
-        return;
-      }
-      const data = {
-        object: "contacts",
-        filters: [
-          {
-            propertyName: "email",
-            operator: "EQ",
-            value: email,
-          },
-        ],
-      };
-      return this.hubspot.searchCRM(data, $);
-    },
-  },
-  async run({ $ }) {
-    const {
-      hubspot,
-      /* eslint-disable no-unused-vars */
-      propertyGroups,
-      $db,
-      ...properties
-    } = this;
-    const objectType = this.getObjectType();
-
-    // checkbox (string[]) props must be semicolon separated strings
-    Object.keys(properties)
-      .forEach((key) => {
-        let value = properties[key];
-        if (Array.isArray(value)) {
-          properties[key] = value.join(";");
-        }
-      });
-
-    // search for the contact with the email provided
-    const {
-      total, results,
-    } = await this.getContact(this.email, $) || {};
-
-    // if contact is found, update it. if not, create new contact.
-    const response = total > 0
-      ? await hubspot.updateObject(objectType, properties, results[0].id, $)
-      : await hubspot.createObject(objectType, properties, $);
-
-    const objectName = hubspot.getObjectTypeName(objectType);
-    $.export("$summary", `Successfully ${total > 0
-      ? "updated"
-      : "created"} ${objectName}`);
-
-    return response;
   },
 };

@@ -5,8 +5,13 @@ export default {
   ...common,
   key: "youtube_data_api-upload-video",
   name: "Upload Video",
-  description: "Post a video to your channel. [See the docs](https://developers.google.com/youtube/v3/docs/videos/insert) for more information",
-  version: "0.0.6",
+  description: "Post a video to your channel. [See the documentation](https://developers.google.com/youtube/v3/docs/videos/insert) for more information",
+  version: "1.0.2",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   type: "action",
   props: {
     youtubeDataApi,
@@ -22,17 +27,10 @@ export default {
         "description",
       ],
     },
-    fileUrl: {
-      propDefinition: [
-        youtubeDataApi,
-        "fileUrl",
-      ],
-    },
     filePath: {
-      propDefinition: [
-        youtubeDataApi,
-        "filePath",
-      ],
+      type: "string",
+      label: "File Path or URL",
+      description: "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf).",
     },
     privacyStatus: {
       propDefinition: [
@@ -59,5 +57,11 @@ export default {
       ],
     },
     ...common.props,
+    syncDir: {
+      type: "dir",
+      accessMode: "read",
+      sync: true,
+      optional: true,
+    },
   },
 };

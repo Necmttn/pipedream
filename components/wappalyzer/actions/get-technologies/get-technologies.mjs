@@ -4,8 +4,14 @@ export default {
   key: "wappalyzer-get-technologies",
   name: "Get Technologies",
   description: "Returns the details of technologies used on a specific URL. [See the documentation](https://www.wappalyzer.com/docs/api/v2/lookup/)",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   type: "action",
+  ai: "optimized",
   props: {
     wappalyzer,
     urls: {

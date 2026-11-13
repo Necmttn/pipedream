@@ -3,9 +3,15 @@ import mem from "../../mem.app.mjs";
 export default {
   key: "mem-create-mem",
   name: "Create Mem",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   description: "Create a new mem. [See the documentation](https://docs.mem.ai/docs/api/mems/create)",
   type: "action",
+  ai: "optimized",
   props: {
     mem,
     content: {

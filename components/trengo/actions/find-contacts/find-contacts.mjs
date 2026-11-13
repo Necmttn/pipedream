@@ -1,12 +1,17 @@
-import app from "../../trengo.app.mjs";
 import utils from "../../common/utils.mjs";
+import app from "../../trengo.app.mjs";
 
 export default {
   type: "action",
   key: "trengo-find-contacts",
-  version: "0.0.1",
+  version: "0.0.13",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: true,
+  },
   name: "Find Contacts",
-  description: "Finds contacts with the given term. [See the docs](https://developers.trengo.com/reference/as)",
+  description: "Finds contacts with the given term. [See the documentation](https://developers.trengo.com/reference/list-all-contacts)",
   props: {
     app,
     term: {

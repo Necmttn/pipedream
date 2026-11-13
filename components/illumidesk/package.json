@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/illumidesk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pipedream Illumidesk Components",
   "main": "illumidesk.app.mjs",
   "keywords": [
@@ -13,6 +13,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@pipedream/platform": "^1.5.1"
+    "@pipedream/platform": "^1.6.8"
   }
 }

@@ -4,9 +4,15 @@ import spreadsheetCom from "../../spreadsheet_com.app.mjs";
 export default {
   key: "spreadsheet_com-create-rows",
   name: "Create Rows",
-  version: "0.0.1",
+  version: "0.0.3",
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   description: "Adds new row(s) after last row that has data. Empty data sets are ignored. Provide data for at least 1 column. [See the documentation](https://developer.spreadsheet.com/#tag/Rows/operation/createRows)",
   type: "action",
+  ai: "optimized",
   props: {
     spreadsheetCom,
     workbookId: {

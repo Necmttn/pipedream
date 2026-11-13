@@ -38,9 +38,14 @@ export default {
         summary,
         id,
         start,
+        status,
       } = event;
+      const baseSummary = summary || `Event ID: ${id}`;
+      const statusPrefix = status && status !== "confirmed"
+        ? `[${status.toUpperCase()}]`
+        : "";
       return {
-        summary,
+        summary: `${statusPrefix} ${baseSummary}`.trim(),
         id,
         ts: +new Date(start.dateTime),
       };
@@ -48,9 +53,9 @@ export default {
     async processEvents(event) {
       const intervalData = this.getIntervalData(event);
       const config = this.getConfig(intervalData);
-      const resp = await this.googleCalendar.getEvents(config);
+      const resp = await this.googleCalendar.listEvents(config);
 
-      const events = resp?.data?.items;
+      const events = resp?.data?.items || resp?.items;
       if (!Array.isArray(events)) {
         console.log("nothing to emit");
         return;
